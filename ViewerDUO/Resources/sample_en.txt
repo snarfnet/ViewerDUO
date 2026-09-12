@@ -1,0 +1,55 @@
+How to use Viewer DUO
+
+Chapter 1 Welcome
+
+Viewer DUO brings the feel of turning real paper to the screen. Each page is simulated as a physical sheet: it bends with your finger, casts a shadow on the page beneath, and settles at a natural speed when you let go.
+
+This book is a sample placed in your library the first time the app starts. Delete it whenever you like. Press and hold a book to rename or delete it.
+
+Start by resting a finger on the right edge of the page and pulling slowly to the left. The paper lifts and the back shows through. Let go early and it falls back; pass the middle and it turns to the next page.
+
+Chapter 2 Turning pages
+
+There are three ways to turn.
+
+The first is dragging. Pull from an edge and the corner of the sheet follows your finger. Pinching a corner gives a big diagonal curl; pulling from the middle of the edge folds the page straight over.
+
+The second is tapping. Tap near an edge and the corner lifts and turns on its own. Tap the opposite edge to go back.
+
+The third is the slider at the bottom, useful for long books. The table of contents and your bookmarks also jump straight to a page.
+
+Tap the centre of the screen to hide the control panels when you want to read without distraction. Tap again to bring them back.
+
+Chapter 3 Spread and single page
+
+On a wide screen the book opens as a two-page spread: an iPad on its side, an iPhone in landscape, or an iPhone Duo unfolded. On iPhone Duo the hinge becomes the spine of the book.
+
+In a spread, folding the right page to the left reveals its back as the new left page, and a fresh right page appears beneath it, exactly like a printed book.
+
+The layout button in the bottom panel switches between automatic, single page and spread. For manga or vertical Japanese text, turn on right-to-left so pages run from right to left. This can be set per book.
+
+Chapter 4 Paper and desk
+
+Choose from six papers and six desks. White, cream, parchment, sepia, moss and night; walnut, marble, indigo linen, leather, obsidian and ivory. Mix them freely.
+
+For reading at night, try night paper on the obsidian desk with the warm filter raised a little. In a bright room, cream paper on marble is easy on the eyes.
+
+Text books can be set in serif, sans, rounded, Mincho or Gothic, at any size, line spacing and margin. Vertical Japanese writing is supported. Change a setting and the book is re-set on the spot, keeping your place.
+
+Chapter 5 Formats
+
+Viewer DUO opens PDF, EPUB, TXT, ZIP/CBZ and RAR/CBR. Use Add books, or choose Viewer DUO from another app's share sheet.
+
+PDFs keep their original layout, and their outline becomes the table of contents. EPUB and TXT are re-set in your chosen paper and typeface. Images inside ZIP and RAR archives become pages in file-name order.
+
+Full-text search works for PDF, EPUB and TXT. Use the magnifier in the top-right corner.
+
+Chapter 6 Bookmarks and memory
+
+The bookmark button in the top-right corner marks the page you are on; press it again to remove the mark. Bookmarks sit in the tab beside the table of contents, ready whenever you need them.
+
+Your position is remembered every time you close a book, and the library shows a Continue reading card at the top.
+
+Every book stays on this device. Nothing is uploaded anywhere.
+
+Enjoy your reading.
