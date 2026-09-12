@@ -4,7 +4,7 @@ import jwt, time, requests, json, os, sys
 KEY_ID = 'WDXGY9WX55'
 ISSUER = '2be0734f-943a-4d61-9dc9-5d9045c46fec'
 p8 = open(os.path.expanduser('~/.appstoreconnect/private_keys/AuthKey_WDXGY9WX55.p8')).read()
-APP_ID = 'TBD'
+APP_ID = '6811308523'
 
 def make_token():
     return jwt.encode({'iss': ISSUER, 'iat': int(time.time()), 'exp': int(time.time()) + 1200, 'aud': 'appstoreconnect-v1'}, p8, algorithm='ES256', headers={'kid': KEY_ID})

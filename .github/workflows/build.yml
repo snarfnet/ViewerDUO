@@ -7,7 +7,7 @@ on:
 
 env:
   # flip to "true" once the App Store Connect app record exists
-  ASC_READY: "false"
+  ASC_READY: "true"
 
 jobs:
   build:
