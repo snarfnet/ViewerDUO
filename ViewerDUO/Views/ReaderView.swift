@@ -4,10 +4,10 @@ import UIKit
 struct ReaderView: View {
     @EnvironmentObject var library: Library
     @EnvironmentObject var settings: DuoSettings
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var controller = CurlController()
 
     let book: Book
+    let onClose: () -> Void
     @State private var chromeVisible = true
     @State private var showSettings = false
     @State private var showContents = false
@@ -81,7 +81,7 @@ struct ReaderView: View {
             controller.open(book: book, url: library.fileURL(for: book), startPage: book.lastPage, startOffset: book.lastOffset)
             UIApplication.shared.isIdleTimerDisabled = settings.keepAwake
             if ScreenshotMode.target == "reader" {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { controller.freezeDemoCurl() }
+                scheduleDemoCurl(attempt: 0)
             } else if !UserDefaults.standard.bool(forKey: "readerHintShown") {
                 UserDefaults.standard.set(true, forKey: "readerHintShown")
                 withAnimation { showHint = true }
@@ -138,6 +138,17 @@ struct ReaderView: View {
 
     // MARK: - Wiring
 
+    /// Screenshot mode: freeze a half-turned page once the book has finished loading.
+    private func scheduleDemoCurl(attempt: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 0 ? 2.0 : 0.5)) {
+            if controller.isLoading || controller.source == nil {
+                if attempt < 12 { scheduleDemoCurl(attempt: attempt + 1) }
+                return
+            }
+            controller.freezeDemoCurl()
+        }
+    }
+
     private func configureController() {
         controller.onCenterTap = { withAnimation { chromeVisible.toggle() } }
         controller.onTurnBegan = { settings.tap() }
@@ -191,7 +202,8 @@ struct ReaderView: View {
             HStack(spacing: 10) {
                 ChromeButton(desk: desk, systemName: "chevron.left", size: 38) {
                     settings.tap()
-                    dismiss()
+                    savePosition()
+                    onClose()
                 }
                 .accessibilityLabel(L10n.back)
                 VStack(spacing: 1) {

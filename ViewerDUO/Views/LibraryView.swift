@@ -46,7 +46,7 @@ struct LibraryView: View {
                                     BookCard(book: book, desk: desk, coverVersion: library.coverVersion)
                                         .onTapGesture {
                                             settings.tap()
-                                            openBook = book
+                                            withAnimation(.easeInOut(duration: 0.3)) { openBook = book }
                                         }
                                         .contextMenu {
                                             Button { renameTarget = book } label: { Label(L10n.rename, systemImage: "pencil") }
@@ -66,13 +66,18 @@ struct LibraryView: View {
                 addButton(desk)
                     .padding(.bottom, 18)
             }
-        }
-        .preferredColorScheme(desk.isDark ? .dark : .light)
-        .fullScreenCover(item: $openBook) { book in
-            ReaderView(book: book)
+            if let book = openBook {
+                // Presented inline rather than as a cover so the reader owns the whole window on every device.
+                ReaderView(book: book) {
+                    withAnimation(.easeInOut(duration: 0.3)) { openBook = nil }
+                }
                 .environmentObject(library)
                 .environmentObject(settings)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(5)
+            }
         }
+        .preferredColorScheme(desk.isDark ? .dark : .light)
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environmentObject(settings)
@@ -162,7 +167,7 @@ struct LibraryView: View {
     private func continueCard(_ book: Book, desk: DeskStyle) -> some View {
         Button {
             settings.tap()
-            openBook = book
+            withAnimation(.easeInOut(duration: 0.3)) { openBook = book }
         } label: {
             HStack(spacing: 14) {
                 CoverImage(book: book, version: library.coverVersion)
