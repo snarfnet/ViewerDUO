@@ -143,8 +143,13 @@ final class CurlController: ObservableObject {
 
     // MARK: - Layout
 
-    func updateEnvironment(viewSize: CGSize, regularWidth: Bool, displayScale: CGFloat) {
+    func updateEnvironment(viewSize: CGSize, regularWidth: Bool, displayScale: CGFloat, hingeX: CGFloat? = nil, hingeGap: CGFloat = 0) {
         var changed = false
+        if hingeX != self.hingeX || hingeGap != self.hingeGap {
+            self.hingeX = hingeX
+            self.hingeGap = hingeGap
+            changed = true
+        }
         if viewSize != self.viewSize { self.viewSize = viewSize; changed = true }
         if regularWidth != self.regularWidth { self.regularWidth = regularWidth; changed = true }
         let sc = min(displayScale, 2)
@@ -171,7 +176,8 @@ final class CurlController: ObservableObject {
         case _ where slideMode: return viewSize.width > 200
         case .single: return false
         case .spread: return viewSize.width > 320
-        case .auto: return regularWidth && viewSize.width >= 600
+        // An unfolded iPhone Duo already looks like an open book, so the fold always means a spread.
+        case .auto: return hingeX != nil || (regularWidth && viewSize.width >= 600)
         }
     }
 

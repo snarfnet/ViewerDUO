@@ -8,6 +8,8 @@ final class TextSource: PageSource {
     private struct PageRef {
         let chapter: Int
         let range: CFRange
+        /// Set for a page that shows one illustration on its own (vertical text cannot hold pictures inline).
+        var image: URL? = nil
     }
 
     private let chapterTexts: [ChapterText]
@@ -111,12 +113,34 @@ final class TextSource: PageSource {
         let frameAttrs = Self.frameAttributes(vertical: style.vertical)
         for (ci, fs) in framesetters.enumerated() {
             starts.append(refs.count)
-            let len = styled[ci].length
+            let str = styled[ci]
+            let len = str.length
+            let plain = str.string as NSString
+            var pictures: [(Int, URL)] = []
+            if style.vertical {
+                str.enumerateAttribute(.duoImage, in: NSRange(location: 0, length: len), options: []) { v, r, _ in
+                    if let u = v as? URL { pictures.append((r.location, u)) }
+                }
+            }
+            var next = 0
             var start = 0
             var guardCount = 0
             while start < len && guardCount < 20_000 {
                 guardCount += 1
-                let frame = CTFramesetterCreateFrame(fs, CFRange(location: start, length: 0), path, frameAttrs)
+                if next < pictures.count, start == pictures[next].0 {
+                    refs.append(PageRef(chapter: ci, range: CFRange(location: start, length: 1), image: pictures[next].1))
+                    start += 1
+                    next += 1
+                    continue
+                }
+                // Text runs up to the next picture; a gap of nothing but line breaks gets no page.
+                let end = next < pictures.count ? pictures[next].0 : len
+                if plain.substring(with: NSRange(location: start, length: end - start))
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    start = end
+                    continue
+                }
+                let frame = CTFramesetterCreateFrame(fs, CFRange(location: start, length: end - start), path, frameAttrs)
                 let visible = CTFrameGetVisibleStringRange(frame)
                 if visible.length <= 0 {
                     // Nothing fits (e.g. an oversized image); skip a character rather than loop forever.
@@ -127,7 +151,8 @@ final class TextSource: PageSource {
                 refs.append(PageRef(chapter: ci, range: visible))
                 start += visible.length
             }
-            if len == 0 { refs.append(PageRef(chapter: ci, range: CFRange(location: 0, length: 0))) }
+            // Every chapter needs at least one page so the contents list can point at it.
+            if refs.count == starts[starts.count - 1] { refs.append(PageRef(chapter: ci, range: CFRange(location: 0, length: 0))) }
         }
         lock.lock()
         pages = refs
@@ -288,10 +313,8 @@ final class TextSource: PageSource {
             if let u = value as? URL { imageRanges.append((range, u)) }
         }
         for (range, url) in imageRanges.reversed() {
-            if style.vertical {
-                out.replaceCharacters(in: range, with: "")
-                continue
-            }
+            // Vertical text keeps the marker; pagination turns each picture into a page of its own.
+            if style.vertical { continue }
             guard let natural = imageSize(url) else {
                 out.replaceCharacters(in: range, with: "")
                 continue
@@ -328,11 +351,21 @@ final class TextSource: PageSource {
         let tr = met.textRect
         let rectCT = CGRect(x: tr.minX, y: size.height - tr.maxY, width: tr.width, height: tr.height)
         let path = CGPath(rect: rectCT, transform: nil)
-        let fs = framesetters[ref.chapter]
-        let frame = CTFramesetterCreateFrame(fs, ref.range, path, Self.frameAttributes(vertical: style.vertical))
-        ctx.textMatrix = .identity
-        CTFrameDraw(frame, ctx)
-        if !style.vertical { drawImages(in: frame, ctx: ctx) }
+        if let url = ref.image {
+            if let img = image(for: url, maxPixel: max(tr.width, tr.height) * scale) {
+                let iw = CGFloat(img.width), ih = CGFloat(img.height)
+                let s = min(rectCT.width / iw, rectCT.height / ih)
+                let w = iw * s, h = ih * s
+                ctx.interpolationQuality = .high
+                ctx.draw(img, in: CGRect(x: rectCT.midX - w / 2, y: rectCT.midY - h / 2, width: w, height: h))
+            }
+        } else {
+            let fs = framesetters[ref.chapter]
+            let frame = CTFramesetterCreateFrame(fs, ref.range, path, Self.frameAttributes(vertical: style.vertical))
+            ctx.textMatrix = .identity
+            CTFrameDraw(frame, ctx)
+            if !style.vertical { drawImages(in: frame, ctx: ctx) }
+        }
 
         // Running head and folio.
         let muted = style.paper.muted

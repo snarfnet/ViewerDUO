@@ -43,6 +43,13 @@ struct PageCurlView: UIViewRepresentable {
         single.require(toFail: double)
         view.addGestureRecognizer(single)
         context.coordinator.view = view
+        if #available(iOS 27.1, *) {
+            // Folding or unfolding iPhone Duo moves the division region; lay the book out again when it does.
+            let hinge = UIHingeInteraction { [weak coordinator = context.coordinator] _, _ in
+                coordinator?.pushEnvironment()
+            }
+            view.addInteraction(hinge)
+        }
         return view
     }
 
@@ -71,7 +78,21 @@ struct PageCurlView: UIViewRepresentable {
 
         func pushEnvironment() {
             guard let view else { return }
-            controller.updateEnvironment(viewSize: view.bounds.size, regularWidth: regularWidth, displayScale: displayScale)
+            let fold = Self.verticalFold(in: view)
+            controller.updateEnvironment(viewSize: view.bounds.size, regularWidth: regularWidth, displayScale: displayScale,
+                                         hingeX: fold?.x, hingeGap: fold?.gap ?? 0)
+        }
+
+        /// The fold of an open iPhone Duo when it runs top to bottom through this view; it becomes the spine.
+        static func verticalFold(in view: UIView) -> (x: CGFloat, gap: CGFloat)? {
+            guard #available(iOS 27.1, *) else { return nil }
+            let bounds = view.bounds
+            for r in view.reservedRegions(kind: .division) where r.isActive {
+                let f = r.frame
+                guard f.height >= f.width, f.midX > bounds.minX + 40, f.midX < bounds.maxX - 40 else { continue }
+                return (f.midX - bounds.minX, f.width + r.margins.left + r.margins.right)
+            }
+            return nil
         }
 
         // MARK: MTKViewDelegate
