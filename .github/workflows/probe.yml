@@ -1,6 +1,8 @@
 name: Probe SDK
 on:
-  workflow_dispatch:
+  push:
+    branches: [dev/v1.2]
+    paths: [.github/workflows/probe.yml]
 jobs:
   probe:
     runs-on: xcode-27

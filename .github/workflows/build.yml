@@ -3,6 +3,7 @@ name: Build and Upload to App Store
 on:
   push:
     branches: [master, 'dev/**']
+    paths-ignore: [.github/workflows/probe.yml]
   workflow_dispatch:
 
 env:
