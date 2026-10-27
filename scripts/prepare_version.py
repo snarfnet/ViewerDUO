@@ -16,7 +16,9 @@ WHATS_NEW = {
         '・漫画などの固定レイアウトEPUBを正しく表示し、表紙も出るようにしました\n'
         '・ピンチでページを拡大できるようになりました\n'
         '・大きなファイルやiCloud上のファイルの取り込みで固まる・失敗する問題を直しました\n'
-        '・iPhone Duo の画面いっぱいに表示されるようにしました'
+        '・iPhone Duo の画面いっぱいに表示し、開いたときの折り目を本の背にするようにしました
+'
+        '・縦書きでも挿絵を1ページずつ表示するようにしました'
     ),
     'en-US': (
         '- New "Slide two at a time" mode: numbered images sit side by side and one swipe changes both\n'
@@ -24,7 +26,9 @@ WHATS_NEW = {
         '- Fixed-layout EPUB comics now display correctly, with their covers\n'
         '- Pinch a page to zoom\n'
         '- Fixed freezes and failures when importing large files or files stored in iCloud\n'
-        '- Fills the whole screen on iPhone Duo'
+        '- Fills the whole screen on iPhone Duo, and the fold of an open Duo becomes the spine of the book
+'
+        '- Illustrations now appear in vertical text, each on its own page'
     ),
 }
 
