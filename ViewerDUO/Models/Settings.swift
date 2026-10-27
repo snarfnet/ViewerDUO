@@ -38,6 +38,8 @@ final class DuoSettings: ObservableObject {
     @Published var coverAlone: Bool { didSet { d.set(coverAlone, forKey: "coverAlone") } }
     @Published var pageStack: Bool { didSet { d.set(pageStack, forKey: "pageStack") } }
     @Published var curlSoftness: Double { didSet { d.set(curlSoftness, forKey: "curlSoftness") } }
+    /// "curl" turns paper; "slide" shows two pages side by side and swipes both at once.
+    @Published var turnStyle: String { didSet { d.set(turnStyle, forKey: "turnStyle") } }
     @Published var sortOrder: String { didSet { d.set(sortOrder, forKey: "sortOrder") } }
 
     init() {
@@ -60,10 +62,13 @@ final class DuoSettings: ObservableObject {
         pageStack = d.object(forKey: "pageStack") == nil ? true : d.bool(forKey: "pageStack")
         curlSoftness = d.object(forKey: "curlSoftness") == nil ? 0.5 : d.double(forKey: "curlSoftness")
         sortOrder = d.string(forKey: "sortOrder") ?? "recent"
+        turnStyle = d.string(forKey: "turnStyle") ?? "curl"
         if ScreenshotMode.isActive {
             deskID = "walnut"
             paperID = "cream"
             warmth = 0
+            turnStyle = ScreenshotMode.target == "slide" ? "slide" : "curl"
+            coverAlone = ScreenshotMode.target != "slide"
         }
     }
 

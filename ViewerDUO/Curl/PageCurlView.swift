@@ -32,6 +32,10 @@ struct PageCurlView: UIViewRepresentable {
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pan(_:)))
         pan.maximumNumberOfTouches = 1
         view.addGestureRecognizer(pan)
+        let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pinch(_:)))
+        pinch.delegate = context.coordinator
+        pan.delegate = context.coordinator
+        view.addGestureRecognizer(pinch)
         let double = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTap(_:)))
         double.numberOfTapsRequired = 2
         view.addGestureRecognizer(double)
@@ -52,13 +56,14 @@ struct PageCurlView: UIViewRepresentable {
         coordinator.controller.stopAnimating()
     }
 
-    final class Coordinator: NSObject, MTKViewDelegate {
+    final class Coordinator: NSObject, MTKViewDelegate, UIGestureRecognizerDelegate {
         let controller: CurlController
         var renderer: CurlRenderer?
         weak var view: MTKView?
         var regularWidth = false
         var displayScale: CGFloat = 2
         private var panActive = false
+        private var pinchFired = false
 
         init(controller: CurlController) {
             self.controller = controller
@@ -101,6 +106,30 @@ struct PageCurlView: UIViewRepresentable {
             default:
                 break
             }
+        }
+
+        /// Spreading two fingers on a page opens it in the zoom viewer (same as a double tap).
+        @objc func pinch(_ g: UIPinchGestureRecognizer) {
+            guard let view else { return }
+            switch g.state {
+            case .began:
+                pinchFired = false
+                if panActive {
+                    controller.panEnded(velocity: .zero)
+                    panActive = false
+                }
+            case .changed:
+                if !pinchFired, g.scale > 1.12 {
+                    pinchFired = true
+                    controller.doubleTap(at: g.location(in: view))
+                }
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            g is UIPinchGestureRecognizer || other is UIPinchGestureRecognizer
         }
 
         @objc func singleTap(_ g: UITapGestureRecognizer) {

@@ -115,7 +115,7 @@ enum RichText {
         "section", "article", "aside", "header", "footer", "nav", "figure", "figcaption", "hr", "dt", "dd", "dl",
         "address", "body", "main", "center",
     ]
-    private static let skipTags: Set<String> = ["head", "script", "style", "rt", "rp", "title", "svg", "math"]
+    private static let skipTags: Set<String> = ["head", "script", "style", "rt", "rp", "title", "math"]
 
     static func fromXHTML(url: URL, title: String) -> ChapterText {
         let data = (try? Data(contentsOf: url)) ?? Data()
@@ -222,6 +222,10 @@ enum RichText {
             return
         case "hr":
             out.append(NSAttributedString(string: "\u{2014}\u{2014}\u{2014}\n", attributes: [.duoCenter: true]))
+            return
+        case "svg":
+            // Many Japanese EPUBs wrap each illustration in <svg><image xlink:href=…/></svg>; keep only the pictures.
+            for img in node.all("image") + node.all("img") { walk(img, into: out, ctx: &ctx) }
             return
         case "img", "image":
             if let src = node.attr("src") ?? node.attr("href") {

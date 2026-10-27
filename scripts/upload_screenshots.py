@@ -5,7 +5,8 @@ from PIL import Image
 KEY_ID = 'WDXGY9WX55'
 ISSUER = '2be0734f-943a-4d61-9dc9-5d9045c46fec'
 p8 = open(os.path.expanduser('~/.appstoreconnect/private_keys/AuthKey_WDXGY9WX55.p8')).read()
-LOC_ID = '54ed03bd-b419-4acc-94cb-0c7b8a1706ee'  # ja (primary) appStoreVersionLocalization
+# ja (primary) localization of the version being prepared; prepare_version.py exports it.
+LOC_ID = os.environ.get('LOC_ID', '54ed03bd-b419-4acc-94cb-0c7b8a1706ee')
 
 SETS = [('APP_IPHONE_67', 'shots/iphone', (1290, 2796)), ('APP_IPAD_PRO_3GEN_129', 'shots/ipad', (2048, 2732))]
 

@@ -27,6 +27,12 @@ final class CurlController: ObservableObject {
     var coverAlone = true
     var showStack = true
     var softness: CGFloat = 0.5
+    /// Two pages side by side; a swipe slides both away together instead of curling a leaf.
+    private(set) var slideMode = false
+    private var slideOffset: CGFloat = 0
+    private var slideStartX: CGFloat = 0
+    private var slideDragging = false
+    private var slideAnim: (from: CGFloat, to: CGFloat, start: CFTimeInterval, duration: CFTimeInterval, step: Int)?
     /// Screen x of the fold on iPhone Duo (reserved division region). Nil = centre of the view.
     var hingeX: CGFloat?
     var hingeGap: CGFloat = 0
@@ -76,11 +82,29 @@ final class CurlController: ObservableObject {
                 if let pages = try? ArchiveExtractor.imagePages(fileURL: url, format: format, bookID: id), !pages.isEmpty {
                     src = ImageSource(urls: pages)
                 }
+            case .images:
+                let pages = ArchiveExtractor.listImages(in: url)
+                if !pages.isEmpty { src = ImageSource(urls: pages) }
             case .txt:
                 src = TextSource(plainTextURL: url, title: title)
             case .epub:
                 if let pkg = try? EPUBParser.open(fileURL: url, bookID: id) {
-                    src = TextSource(epub: pkg, title: title)
+                    if let pics = pkg.imagePages, !pics.isEmpty {
+                        // Fixed-layout comics: one picture per page, chapters mapped onto picture indices.
+                        var chapters: [Chapter] = []
+                        var pageOfSpine: [Int: Int] = [:]
+                        var k = 0
+                        for (i, doc) in pkg.spine.enumerated() where EPUBParser.singlePicture(in: doc) != nil {
+                            pageOfSpine[i] = k
+                            k += 1
+                        }
+                        for (i, label) in pkg.labeledSpine.sorted(by: { $0.key < $1.key }) {
+                            if let p = pageOfSpine[i] { chapters.append(Chapter(title: label, page: p)) }
+                        }
+                        src = ImageSource(urls: pics, chapters: chapters)
+                    } else {
+                        src = TextSource(epub: pkg, title: title)
+                    }
                 }
             }
             DispatchQueue.main.async {
@@ -128,8 +152,10 @@ final class CurlController: ObservableObject {
         if changed { relayout(force: false) }
     }
 
-    func applySettings(layoutMode: LayoutMode, rightToLeft: Bool, style: TextStyle, coverAlone: Bool, showStack: Bool, softness: CGFloat) {
+    func applySettings(layoutMode: LayoutMode, rightToLeft: Bool, style: TextStyle, coverAlone: Bool, showStack: Bool, softness: CGFloat,
+                       slide: Bool = false) {
         var changed = false
+        if slide != slideMode { slideMode = slide; changed = true }
         if layoutMode != self.layoutMode { self.layoutMode = layoutMode; changed = true }
         if rightToLeft != self.rightToLeft { self.rightToLeft = rightToLeft; changed = true }
         if style != self.style { self.style = style; changed = true }
@@ -142,6 +168,7 @@ final class CurlController: ObservableObject {
 
     private var effectiveSpread: Bool {
         switch layoutMode {
+        case _ where slideMode: return viewSize.width > 200
         case .single: return false
         case .spread: return viewSize.width > 320
         case .auto: return regularWidth && viewSize.width >= 600
@@ -155,10 +182,11 @@ final class CurlController: ObservableObject {
         let aspect = source?.aspect ?? 1.45
         let sp = effectiveSpread
         let layout = BookLayout.make(viewSize: viewSize, spread: sp, rtl: rightToLeft, aspect: aspect, hingeX: sp ? hingeX : nil, hingeGap: sp ? hingeGap : 0)
-        let key = "\(layout.pageSize)-\(sp)-\(rightToLeft)-\(style.fontSize)-\(style.font)-\(style.lineSpacing)-\(style.margin)-\(style.vertical)-\(style.paper.id)-\(displayScale)-\(coverAlone)"
+        let key = "\(layout.pageSize)-\(sp)-\(rightToLeft)-\(style.fontSize)-\(style.font)-\(style.lineSpacing)-\(style.margin)-\(style.vertical)-\(style.paper.id)-\(displayScale)-\(coverAlone)-\(slideMode)"
         guard force || key != lastLayoutKey || layout != engine.layout else { return }
         lastLayoutKey = key
         engine.cancelTurn()
+        resetSlide()
         isTurning = false
         engine.layout = layout
         engine.coverAlone = coverAlone
@@ -216,6 +244,7 @@ final class CurlController: ObservableObject {
         guard !isLoading else { return }
         let p = min(max(0, target), pageCount - 1)
         engine.cancelTurn()
+        resetSlide()
         isTurning = false
         engine.page = p
         page = p
@@ -231,6 +260,17 @@ final class CurlController: ObservableObject {
     /// Animated turn in the reading direction (+1) or back (-1).
     func turn(direction: Int) -> Bool {
         guard !isLoading, !engine.isTurning else { return false }
+        if slideMode {
+            guard slideAnim == nil, !slideDragging else { return false }
+            guard direction > 0 ? engine.canGoForward : engine.canGoBackward else {
+                onBlocked?()
+                return false
+            }
+            isTurning = true
+            onTurnBegan?()
+            animateSlide(step: direction)
+            return true
+        }
         if engine.autoTurn(direction: direction) {
             isTurning = true
             onTurnBegan?()
@@ -247,6 +287,14 @@ final class CurlController: ObservableObject {
     // MARK: - Gestures (called by the view coordinator)
 
     func panBegan(at screen: CGPoint) -> Bool {
+        if slideMode {
+            guard !isLoading, slideAnim == nil else { return false }
+            slideDragging = true
+            slideStartX = screen.x
+            slideOffset = 0
+            isTurning = true
+            return true
+        }
         guard !isLoading, !engine.isTurning, let dir = engine.directionForTouch(at: screen) else {
             if !isLoading && !engine.isTurning { onBlocked?() }
             return false
@@ -261,11 +309,32 @@ final class CurlController: ObservableObject {
     }
 
     func panMoved(to screen: CGPoint) {
+        if slideDragging {
+            var dx = (screen.x - slideStartX) * engine.layout.baseFlip
+            // Nothing beyond the first or last spread: let the pages stretch a little and spring back.
+            if (dx < 0 && !engine.canGoForward) || (dx > 0 && !engine.canGoBackward) { dx *= 0.28 }
+            slideOffset = dx
+            requestDraw()
+            return
+        }
         engine.update(finger: screen)
         requestDraw()
     }
 
     func panEnded(velocity: CGPoint) {
+        if slideDragging {
+            slideDragging = false
+            let vx = velocity.x * engine.layout.baseFlip
+            let span = slideSpan
+            var step = 0
+            if vx < -380 || (vx < 380 && slideOffset < -span * 0.22) { step = 1 }
+            if vx > 380 || (vx > -380 && slideOffset > span * 0.22) { step = -1 }
+            if step > 0 && !engine.canGoForward { step = 0; onBlocked?() }
+            if step < 0 && !engine.canGoBackward { step = 0; onBlocked?() }
+            if step != 0 { onTurnBegan?() }
+            animateSlide(step: step)
+            return
+        }
         engine.endTurn(velocity: velocity)
         startAnimating()
     }
@@ -298,10 +367,44 @@ final class CurlController: ObservableObject {
 
     /// Advances animation; returns true while still moving.
     func tick() -> Bool {
+        if let a = slideAnim {
+            let raw = min(1, max(0, (CACurrentMediaTime() - a.start) / a.duration))
+            let e = 1 - pow(1 - raw, 3)
+            slideOffset = a.from + (a.to - a.from) * CGFloat(e)
+            if raw >= 1 {
+                slideAnim = nil
+                slideOffset = 0
+                isTurning = false
+                if a.step != 0 { engine.step(a.step) }
+            }
+            requestDraw()
+            return slideAnim != nil
+        }
         let moving = engine.tick()
         requestDraw()
         if !moving && engine.turn == nil { isTurning = false }
         return moving
+    }
+
+    // MARK: - Slide mode
+
+    /// Distance between neighbouring spreads: at least the whole view, so the next pair starts off screen.
+    private var slideSpan: CGFloat {
+        max(engine.layout.pageSize.width * 2 + 24, viewSize.width)
+    }
+
+    private func animateSlide(step: Int) {
+        let to = -CGFloat(step) * slideSpan
+        let dist = abs(to - slideOffset)
+        let dur = min(0.38, max(0.16, Double(dist / max(1, slideSpan)) * 0.36))
+        slideAnim = (slideOffset, to, CACurrentMediaTime(), dur, step)
+        startAnimating()
+    }
+
+    private func resetSlide() {
+        slideAnim = nil
+        slideDragging = false
+        slideOffset = 0
     }
 
     // MARK: - Display link
@@ -351,6 +454,24 @@ final class CurlController: ObservableObject {
 
         func tex(_ i: Int) -> MTLTexture? {
             engine.isValid(i) ? store.texture(for: i) : nil
+        }
+
+        if slideMode && engine.layout.spread {
+            // Current spread follows the finger; the neighbour waits one span away on the side it comes from.
+            func addSpread(_ sl: SpreadSlots, dx: CGFloat) {
+                for (index, x) in [(sl.first, -pw), (sl.second, CGFloat(0))] where engine.isValid(index) {
+                    scene.quads.append(QuadSpec(origin: CGPoint(x: x + dx, y: 0), size: size, front: store.texture(for: index), zBase: -2))
+                }
+            }
+            let span = slideSpan
+            addSpread(s, dx: slideOffset)
+            if slideOffset < 0, engine.canGoForward {
+                addSpread(engine.slots(forPage: engine.neighbourPage(1)), dx: slideOffset + span)
+            }
+            if slideOffset > 0, engine.canGoBackward {
+                addSpread(engine.slots(forPage: engine.neighbourPage(-1)), dx: slideOffset - span)
+            }
+            return scene
         }
 
         // Page stacks (thickness) on the physical left/right of the book.
@@ -411,7 +532,7 @@ final class CurlController: ObservableObject {
 
     /// Freezes a half-turned page so App Store screenshots show the curl.
     func freezeDemoCurl() {
-        guard !isLoading, engine.canGoForward else { return }
+        guard !isLoading, !slideMode, engine.canGoForward else { return }
         let layout = engine.layout
         let pw = layout.pageSize.width, ph = layout.pageSize.height
         let flip = layout.baseFlip
@@ -421,6 +542,13 @@ final class CurlController: ObservableObject {
         let fingerScreen = CGPoint(x: layout.spineX + localX * flip, y: layout.top + ph * 0.58)
         engine.update(finger: fingerScreen)
         isTurning = true
+        requestDraw()
+    }
+
+    /// Screenshot mode: hold the slide halfway so both the current and the next pair are visible.
+    func freezeDemoSlide() {
+        guard !isLoading, slideMode, engine.canGoForward else { return }
+        slideOffset = -slideSpan * 0.42
         requestDraw()
     }
 

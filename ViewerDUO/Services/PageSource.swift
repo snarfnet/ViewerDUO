@@ -130,12 +130,13 @@ final class PDFSource: PageSource {
 final class ImageSource: PageSource {
     private let urls: [URL]
     let pageCount: Int
-    let chapters: [Chapter] = []
+    let chapters: [Chapter]
     let aspect: CGFloat
     var isReflowable: Bool { false }
 
-    init(urls: [URL]) {
+    init(urls: [URL], chapters: [Chapter] = []) {
         self.urls = urls
+        self.chapters = chapters
         pageCount = urls.count
         var a: CGFloat = 1.42
         if let first = urls.first, let src = CGImageSourceCreateWithURL(first as CFURL, nil),

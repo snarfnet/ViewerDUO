@@ -16,8 +16,12 @@ def api(method, path, payload=None):
         kw['json'] = payload
     return requests.request(method, f'https://api.appstoreconnect.apple.com/v1{path}', headers=h, **kw)
 
-r = api('GET', f'/apps/{APP_ID}/appStoreVersions?filter[platform]=IOS&limit=1')
-versions = r.json().get('data', [])
+if os.environ.get('VERSION_ID'):
+    r = api('GET', f"/appStoreVersions/{os.environ['VERSION_ID']}")
+    versions = [r.json()['data']] if r.status_code < 300 else []
+else:
+    r = api('GET', f'/apps/{APP_ID}/appStoreVersions?filter[platform]=IOS&limit=1')
+    versions = r.json().get('data', [])
 if not versions:
     print('No version found')
     sys.exit(0)
@@ -34,7 +38,7 @@ build_num = sys.argv[1] if len(sys.argv) > 1 else None
 if build_num:
     print('Waiting for latest VALID build...')
     for i in range(30):
-        r = api('GET', f'/builds?filter[app]={APP_ID}&filter[processingState]=VALID&sort=-uploadedDate&limit=1')
+        r = api('GET', f'/builds?filter[app]={APP_ID}&filter[version]={build_num}&filter[processingState]=VALID&limit=1')
         builds = r.json().get('data', [])
         if builds:
             build_id = builds[0]['id']

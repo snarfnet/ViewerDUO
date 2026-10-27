@@ -95,6 +95,13 @@ struct EPUBPackage {
     let spine: [URL]
     let chapterTitles: [String]
     let rootDir: URL
+    /// Spine indices that have a real title in the NCX / nav document.
+    var labeledSpine: [Int: String] = [:]
+    var coverImage: URL?
+    /// page-progression-direction="rtl" (Japanese manga and vertical novels).
+    var rightToLeft = false
+    /// Set when every spine document is just one picture (fixed-layout manga / photo books).
+    var imagePages: [URL]?
 }
 
 enum EPUBError: Error {
@@ -202,7 +209,56 @@ enum EPUBParser {
         let titles: [String] = spine.enumerated().map { i, u in
             labelByPath[u.path] ?? String(format: L10n.chapterN, i + 1)
         }
-        return EPUBPackage(title: title, author: author, spine: spine, chapterTitles: titles, rootDir: dir)
+        var pkg = EPUBPackage(title: title, author: author, spine: spine, chapterTitles: titles, rootDir: dir)
+        for (i, u) in spine.enumerated() { if let l = labelByPath[u.path] { pkg.labeledSpine[i] = l } }
+        pkg.rightToLeft = oroot.first("spine")?.attr("page-progression-direction")?.lowercased() == "rtl"
+
+        // Cover: EPUB 3 "cover-image" property, then the EPUB 2 <meta name="cover"> id.
+        if let c = manifest.values.first(where: { $0.props.contains("cover-image") }) {
+            pkg.coverImage = resolve(c.href)
+        } else if let meta = oroot.all("meta").first(where: { $0.attr("name") == "cover" }),
+                  let cid = meta.attr("content"), let item = manifest[cid], item.type.hasPrefix("image") {
+            pkg.coverImage = resolve(item.href)
+        }
+
+        let fixedLayout = oroot.all("meta").contains { m in
+            (m.attr("property") == "rendition:layout" && m.text.trimmingCharacters(in: .whitespacesAndNewlines) == "pre-paginated")
+                || (m.attr("name") == "fixed-layout" && m.attr("content") == "true")
+        }
+        let pictures = spine.map { singlePicture(in: $0) }
+        let found = pictures.compactMap { $0 }
+        // Most manga EPUBs are entirely one picture per page; allow a couple of text pages (credits, colophon).
+        if !found.isEmpty, (fixedLayout && found.count * 10 >= spine.count * 7) || found.count * 10 >= spine.count * 9 {
+            pkg.imagePages = found
+            if pkg.coverImage == nil { pkg.coverImage = found.first }
+        }
+        if let c = pkg.coverImage, !FileManager.default.fileExists(atPath: c.path) { pkg.coverImage = nil }
+        return pkg
+    }
+
+    private static let pictureExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "tif", "tiff", "avif"]
+
+    /// The image a spine document shows when it holds almost no text, or nil for a normal text page.
+    static func singlePicture(in doc: URL) -> URL? {
+        if pictureExtensions.contains(doc.pathExtension.lowercased()) {
+            return FileManager.default.fileExists(atPath: doc.path) ? doc : nil
+        }
+        guard let data = try? Data(contentsOf: doc), let raw = String(data: data, encoding: .utf8) else { return nil }
+        var body = raw
+        if let r = raw.range(of: "<body", options: .caseInsensitive) { body = String(raw[r.lowerBound...]) }
+        let pattern = #"<(?:img|image)\b[^>]*?(?:src|xlink:href|href)\s*=\s*["']([^"']+)["']"#
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        let ns = body as NSString
+        let matches = re.matches(in: body, range: NSRange(location: 0, length: ns.length))
+        guard matches.count == 1, let m = matches.first else { return nil }
+        let text = body.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&[a-zA-Z#0-9]+;", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.count < 40 else { return nil }
+        let src = ns.substring(with: m.range(at: 1))
+        let cleaned = (src.components(separatedBy: "#").first ?? src).removingPercentEncoding ?? src
+        let u = URL(fileURLWithPath: cleaned, relativeTo: doc.deletingLastPathComponent()).standardizedFileURL
+        return FileManager.default.fileExists(atPath: u.path) ? u : nil
     }
 
     private static func flatText(_ n: DVXMLNode) -> String {

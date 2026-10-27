@@ -10,7 +10,13 @@ enum L10n {
     static var addBooks: String { t("本を追加", "Add books") }
     static var importHint: String { t("PDF・EPUB・TXT・ZIP・RAR（CBZ/CBR）に対応", "PDF, EPUB, TXT, ZIP and RAR (CBZ/CBR)") }
     static var emptyTitle: String { t("まだ本がありません", "No books yet") }
-    static var emptyBody: String { t("「本を追加」からファイルを取り込んでください。\nPDF / EPUB / TXT / ZIP / RAR", "Tap Add books to import files.\nPDF / EPUB / TXT / ZIP / RAR") }
+    static var emptyBody: String { t("「本を追加」からファイルを取り込んでください。\nPDF / EPUB / TXT / ZIP / RAR / 画像フォルダ", "Tap Add books to import files.\nPDF / EPUB / TXT / ZIP / RAR / image folders") }
+    static var importing: String { t("取り込み中…", "Importing…") }
+    static var imageBook: String { t("画像", "Images") }
+    static var turnStyle: String { t("めくり方", "Page turn") }
+    static var turnCurl: String { t("紙をめくる", "Paper curl") }
+    static var turnSlide: String { t("2枚ずつスライド", "Slide two at a time") }
+    static var slideHint: String { t("左右にスワイプすると2枚とも切り替わります", "Swipe left or right to change both pages") }
     static var delete: String { t("削除", "Delete") }
     static var deleteConfirm: String { t("この本を削除しますか？", "Delete this book?") }
     static var deleteMessage: String { t("ライブラリから取り除きます。元のファイルには影響しません。", "It will be removed from the library. The original file is untouched.") }
@@ -61,7 +67,7 @@ enum L10n {
     static var page: String { t("ページ", "Page") }
     static var pagesFormat: String { t("%dページ", "%d pages") }
     static var importFailed: String { t("取り込めませんでした", "Import failed") }
-    static var importFailedBody: String { t("対応していない形式か、壊れたファイルです。", "Unsupported or damaged file.") }
+    static var importFailedBody: String { t("対応していない形式か、壊れたファイルです。iCloudのファイルは通信できる状態でもう一度お試しください。", "The file is unsupported or damaged. For iCloud files, try again while online.") }
     static var openFailed: String { t("この本を開けません", "This book cannot be opened") }
     static var loading: String { t("読み込み中…", "Loading…") }
     static var chapterN: String { t("第%d章", "Chapter %d") }
@@ -86,7 +92,7 @@ enum L10n {
 
         ページは1枚ずつ物理的な紙としてシミュレートされ、指の動きに合わせて曲がり、影を落とし、手を離すと自然に落ち着きます。
 
-        対応形式：PDF、EPUB、TXT、ZIP/CBZ、RAR/CBR。
+        対応形式：PDF、EPUB（漫画の固定レイアウトも可）、TXT、ZIP/CBZ、RAR/CBR、画像フォルダ。
         文字の本は、書体・大きさ・行間・縦書きを自由に変えられます。
 
         本はすべて端末内に保存され、外部へ送信されることはありません。
@@ -95,7 +101,7 @@ enum L10n {
 
         Each page is simulated as a physical sheet: it bends with your finger, casts a shadow, and settles naturally when you let go.
 
-        Formats: PDF, EPUB, TXT, ZIP/CBZ, RAR/CBR.
+        Formats: PDF, EPUB (including fixed-layout comics), TXT, ZIP/CBZ, RAR/CBR and image folders.
         For text books you can change the typeface, size, line spacing and vertical writing.
 
         Every book stays on your device. Nothing is uploaded.

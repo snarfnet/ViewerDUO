@@ -48,6 +48,7 @@ final class Library: ObservableObject {
                 seedSampleBook(title: L10n.t("Viewer DUO の使い方", "How to use Viewer DUO"), author: L10n.sample)
             }
         }
+        if !ScreenshotMode.isActive { restoreMissingCovers() }
     }
 
     func load() {
@@ -76,29 +77,92 @@ final class Library: ObservableObject {
         books.filter { $0.lastOpened != nil }.max { ($0.lastOpened ?? .distantPast) < ($1.lastOpened ?? .distantPast) }
     }
 
+    /// True while files are being copied in; the library shows a progress card.
+    @Published private(set) var importing = false
+    /// A book the app was asked to open from outside (share sheet / Files "Open in").
+    @Published var pendingOpen: Book?
+
+    /// Imports files and folders off the main thread. Several image files picked together become one book.
     @discardableResult
-    func importFile(from src: URL) -> Book? {
+    func importFiles(_ urls: [URL]) async -> (books: [Book], failed: Int) {
+        guard !urls.isEmpty else { return ([], 0) }
+        importing = true
+        defer { importing = false }
+        let result = await Task.detached(priority: .userInitiated) { () -> ([Book], Int) in
+            var made: [Book] = []
+            var failed = 0
+            var loose: [URL] = []
+            for u in urls {
+                if Library.isDirectory(u) {
+                    if let b = Library.importImageFolder(u) { made.append(b) } else { failed += 1 }
+                } else if ArchiveExtractor.imageExtensions.contains(u.pathExtension.lowercased()) {
+                    loose.append(u)
+                } else if let b = Library.importDocument(u) {
+                    made.append(b)
+                } else {
+                    failed += 1
+                }
+            }
+            if !loose.isEmpty {
+                if let b = Library.importImageFiles(loose) { made.append(b) } else { failed += 1 }
+            }
+            return (made, failed)
+        }.value
+        for b in result.0 {
+            books.insert(b, at: 0)
+            CoverStore.shared.generate(for: b, fileURL: fileURL(for: b)) { [weak self] in self?.coverVersion += 1 }
+        }
+        if !result.0.isEmpty { save() }
+        return (result.0, result.1)
+    }
+
+    /// Opened from another app: import, then open the book straight away.
+    @discardableResult
+    func importAndOpen(_ url: URL) async -> Bool {
+        let r = await importFiles([url])
+        if let b = r.books.first { pendingOpen = b }
+        return r.failed == 0
+    }
+
+    nonisolated private static func isDirectory(_ url: URL) -> Bool {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        return (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? url.hasDirectoryPath
+    }
+
+    /// Copies a file that may still live only in iCloud; the coordinator downloads it first.
+    nonisolated private static func coordinatedCopy(_ src: URL, to dst: URL) -> Bool {
         let scoped = src.startAccessingSecurityScopedResource()
         defer { if scoped { src.stopAccessingSecurityScopedResource() } }
+        var ok = false
+        var err: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: src, options: [.withoutChanges], error: &err) { readURL in
+            try? FileManager.default.removeItem(at: dst)
+            ok = (try? FileManager.default.copyItem(at: readURL, to: dst)) != nil
+        }
+        // Files handed over through "Open in" sit in Documents/Inbox; tidy them once copied.
+        if ok, src.path.contains("/Documents/Inbox/") { try? FileManager.default.removeItem(at: src) }
+        return ok
+    }
+
+    nonisolated private static func importDocument(_ src: URL) -> Book? {
         guard let format = BookFormat.from(ext: src.pathExtension) else { return nil }
         let id = UUID()
         let fileName = id.uuidString + "." + src.pathExtension.lowercased()
-        let dst = Self.booksDir.appendingPathComponent(fileName)
-        do {
-            try? FileManager.default.removeItem(at: dst)
-            try FileManager.default.copyItem(at: src, to: dst)
-        } catch {
-            return nil
-        }
+        let dst = booksDir.appendingPathComponent(fileName)
+        guard coordinatedCopy(src, to: dst) else { return nil }
         var title = src.deletingPathExtension().lastPathComponent
         var author = ""
         var pageCount = 0
+        var rtl: Bool?
+        func fail() -> Book? {
+            try? FileManager.default.removeItem(at: dst)
+            try? FileManager.default.removeItem(at: cacheDir(for: id))
+            return nil
+        }
         switch format {
         case .pdf:
-            guard let doc = PDFDocument(url: dst), doc.pageCount > 0 else {
-                try? FileManager.default.removeItem(at: dst)
-                return nil
-            }
+            guard let doc = PDFDocument(url: dst), doc.pageCount > 0 else { return fail() }
             pageCount = doc.pageCount
             if let t = doc.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String,
                !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -108,27 +172,66 @@ final class Library: ObservableObject {
                 author = a.trimmingCharacters(in: .whitespacesAndNewlines)
             }
         case .epub:
-            guard let pkg = try? EPUBParser.open(fileURL: dst, bookID: id) else {
-                try? FileManager.default.removeItem(at: dst)
-                return nil
-            }
-            pageCount = pkg.spine.count
+            guard let pkg = try? EPUBParser.open(fileURL: dst, bookID: id) else { return fail() }
+            pageCount = pkg.imagePages?.count ?? pkg.spine.count
             if let t = pkg.title, !t.isEmpty { title = t }
             if let a = pkg.author { author = a }
+            if pkg.rightToLeft { rtl = true }
         case .zip, .rar:
-            guard let pages = try? ArchiveExtractor.imagePages(fileURL: dst, format: format, bookID: id) else {
-                try? FileManager.default.removeItem(at: dst)
-                return nil
-            }
+            guard let pages = try? ArchiveExtractor.imagePages(fileURL: dst, format: format, bookID: id) else { return fail() }
             pageCount = pages.count
-        case .txt:
+        case .txt, .images:
             break
         }
-        let book = Book(id: id, title: title, author: author, fileName: fileName, format: format, addedAt: Date(), pageCount: pageCount)
-        books.insert(book, at: 0)
-        save()
-        CoverStore.shared.generate(for: book, fileURL: dst) { [weak self] in self?.coverVersion += 1 }
+        return Book(id: id, title: title, author: author, fileName: fileName, format: format, addedAt: Date(),
+                    pageCount: pageCount, rightToLeft: rtl)
+    }
+
+    /// A picked folder of numbered images becomes one book (sub-folders included, natural order).
+    nonisolated private static func importImageFolder(_ src: URL) -> Book? {
+        let scoped = src.startAccessingSecurityScopedResource()
+        defer { if scoped { src.stopAccessingSecurityScopedResource() } }
+        var book: Book?
+        var err: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: src, options: [.withoutChanges], error: &err) { dir in
+            book = makeImageBook(from: ArchiveExtractor.listImages(in: dir), title: src.lastPathComponent, coordinated: true)
+        }
         return book
+    }
+
+    nonisolated private static func importImageFiles(_ files: [URL]) -> Book? {
+        let sorted = files.sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        let parent = sorted.first?.deletingLastPathComponent().lastPathComponent ?? ""
+        let generic: Set<String> = ["", "tmp", "Inbox", "Downloads", "Documents", "Pictures"]
+        let title = generic.contains(parent) || parent.hasPrefix("com.") || parent.contains("-Inbox")
+            ? (sorted.first?.deletingPathExtension().lastPathComponent ?? L10n.imageBook) : parent
+        return makeImageBook(from: sorted, title: title, coordinated: false)
+    }
+
+    nonisolated private static func makeImageBook(from files: [URL], title: String, coordinated: Bool) -> Book? {
+        guard !files.isEmpty else { return nil }
+        let id = UUID()
+        let dir = booksDir.appendingPathComponent(id.uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Zero-padded names keep the picked order no matter how the originals were numbered.
+        var n = 0
+        for f in files {
+            let dst = dir.appendingPathComponent(String(format: "%05d.", n + 1) + f.pathExtension.lowercased())
+            let ok = coordinated ? (try? FileManager.default.copyItem(at: f, to: dst)) != nil : coordinatedCopy(f, to: dst)
+            if ok { n += 1 }
+        }
+        guard n > 0 else {
+            try? FileManager.default.removeItem(at: dir)
+            return nil
+        }
+        return Book(id: id, title: title, author: "", fileName: id.uuidString, format: .images, addedAt: Date(), pageCount: n)
+    }
+
+    /// Covers live in Caches, which iOS may purge; rebuild any that went missing.
+    private func restoreMissingCovers() {
+        for b in books where !FileManager.default.fileExists(atPath: Self.coverURL(for: b.id).path) {
+            CoverStore.shared.generate(for: b, fileURL: fileURL(for: b)) { [weak self] in self?.coverVersion += 1 }
+        }
     }
 
     func delete(_ book: Book) {
@@ -169,6 +272,12 @@ final class Library: ObservableObject {
         guard let i = books.firstIndex(where: { $0.id == book.id }) else { return }
         books[i].rightToLeft = rightToLeft
         books[i].verticalText = verticalText
+        save()
+    }
+
+    func setTurnStyle(_ book: Book, _ style: String?) {
+        guard let i = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[i].turnStyle = style
         save()
     }
 
@@ -228,7 +337,41 @@ final class Library: ObservableObject {
                 books[books.count - 1].lastOpened = Date().addingTimeInterval(-Double(i) * 3600)
             }
         }
+        if ScreenshotMode.target == "slide", let b = Self.demoImageBook() {
+            books.insert(b, at: 0)
+            CoverStore.shared.generate(for: b, fileURL: fileURL(for: b)) { [weak self] in self?.coverVersion += 1 }
+        }
         save()
+    }
+
+    /// Numbered picture pages for the slide-mode screenshot.
+    private static func demoImageBook() -> Book? {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("demo-images", isDirectory: true)
+        try? FileManager.default.removeItem(at: tmp)
+        try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        var files: [URL] = []
+        let size = CGSize(width: 700, height: 1000)
+        for i in 1...10 {
+            let hue = CGFloat(i) / 10.0
+            let img = UIGraphicsImageRenderer(size: size).image { ctx in
+                let cg = ctx.cgContext
+                let top = UIColor(hue: hue, saturation: 0.45, brightness: 0.95, alpha: 1)
+                let bottom = UIColor(hue: hue + 0.08, saturation: 0.65, brightness: 0.55, alpha: 1)
+                if let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [top.cgColor, bottom.cgColor] as CFArray, locations: [0, 1]) {
+                    cg.drawLinearGradient(g, start: .zero, end: CGPoint(x: 0, y: size.height), options: [])
+                }
+                UIColor(white: 1, alpha: 0.85).setFill()
+                cg.fillEllipse(in: CGRect(x: 150, y: 260, width: 400, height: 400))
+                let para = NSMutableParagraphStyle()
+                para.alignment = .center
+                let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 220, weight: .heavy),
+                                                            .foregroundColor: bottom, .paragraphStyle: para]
+                ("\(i)" as NSString).draw(in: CGRect(x: 0, y: 330, width: size.width, height: 280), withAttributes: attrs)
+            }
+            let u = tmp.appendingPathComponent(String(format: "page_%02d.jpg", i))
+            if let d = img.jpegData(compressionQuality: 0.9) { try? d.write(to: u); files.append(u) }
+        }
+        return makeImageBook(from: files, title: L10n.t("連番画像サンプル", "Numbered images"), coordinated: true)
     }
 }
 
@@ -264,15 +407,20 @@ final class CoverStore {
                         image = UIImage(cgImage: cg)
                     }
                 }
-            case .zip, .rar:
-                if let pages = try? ArchiveExtractor.imagePages(fileURL: fileURL, format: book.format, bookID: book.id), !pages.isEmpty {
-                    let src = ImageSource(urls: pages)
-                    let style = TextStyle(paper: PaperStyle.named("white"), font: .serif, fontSize: 14, lineSpacing: 1.6, margin: 1, vertical: false)
-                    if let cg = src.render(page: 0, size: CGSize(width: size.width, height: size.width * src.aspect), scale: 2, style: style) {
-                        image = UIImage(cgImage: cg)
-                    }
+            case .zip, .rar, .images:
+                let pages = book.format == .images ? ArchiveExtractor.listImages(in: fileURL)
+                    : ((try? ArchiveExtractor.imagePages(fileURL: fileURL, format: book.format, bookID: book.id)) ?? [])
+                if let first = pages.first {
+                    image = Self.pictureCover(first, width: size.width)
                 }
-            case .txt, .epub:
+            case .epub:
+                if let pkg = try? EPUBParser.open(fileURL: fileURL, bookID: book.id), let c = pkg.coverImage {
+                    image = Self.pictureCover(c, width: size.width)
+                }
+                if image == nil {
+                    image = Self.designedCover(title: book.title, author: book.author, hue: book.hue, size: size)
+                }
+            case .txt:
                 image = Self.designedCover(title: book.title, author: book.author, hue: book.hue, size: size)
             }
             if let image, let data = image.jpegData(compressionQuality: 0.85) {
@@ -283,6 +431,13 @@ final class CoverStore {
             }
             DispatchQueue.main.async(execute: completion)
         }
+    }
+
+    private static func pictureCover(_ url: URL, width: CGFloat) -> UIImage? {
+        let src = ImageSource(urls: [url])
+        let style = TextStyle(paper: PaperStyle.named("white"), font: .serif, fontSize: 14, lineSpacing: 1.6, margin: 1, vertical: false)
+        guard let cg = src.render(page: 0, size: CGSize(width: width, height: width * src.aspect), scale: 2, style: style) else { return nil }
+        return UIImage(cgImage: cg)
     }
 
     /// A cloth-bound cover with a paper label, coloured from the book's hue.

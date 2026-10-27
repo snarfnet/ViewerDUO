@@ -20,6 +20,7 @@ struct ReaderView: View {
     private var liveBook: Book { library.book(withID: book.id) ?? book }
     private var rtl: Bool { liveBook.rightToLeft ?? settings.rightToLeft }
     private var vertical: Bool { liveBook.verticalText ?? settings.verticalText }
+    private var slide: Bool { (liveBook.turnStyle ?? settings.turnStyle) == "slide" }
 
     private var textStyle: TextStyle {
         var s = settings.textStyle
@@ -80,7 +81,7 @@ struct ReaderView: View {
             library.markOpened(book)
             controller.open(book: book, url: library.fileURL(for: book), startPage: book.lastPage, startOffset: book.lastOffset)
             UIApplication.shared.isIdleTimerDisabled = settings.keepAwake
-            if ScreenshotMode.target == "reader" {
+            if ScreenshotMode.target == "reader" || ScreenshotMode.target == "slide" {
                 scheduleDemoCurl(attempt: 0)
             } else if !UserDefaults.standard.bool(forKey: "readerHintShown") {
                 UserDefaults.standard.set(true, forKey: "readerHintShown")
@@ -109,6 +110,8 @@ struct ReaderView: View {
         .onChange(of: settings.coverAlone) { _, _ in pushSettings() }
         .onChange(of: settings.pageStack) { _, _ in pushSettings() }
         .onChange(of: settings.curlSoftness) { _, _ in pushSettings() }
+        .onChange(of: settings.turnStyle) { _, _ in pushSettings() }
+        .onChange(of: liveBook.turnStyle) { _, _ in pushSettings() }
         .onChange(of: settings.keepAwake) { _, v in UIApplication.shared.isIdleTimerDisabled = v }
         .onChange(of: liveBook.rightToLeft) { _, _ in pushSettings() }
         .onChange(of: liveBook.verticalText) { _, _ in pushSettings() }
@@ -145,7 +148,7 @@ struct ReaderView: View {
                 if attempt < 12 { scheduleDemoCurl(attempt: attempt + 1) }
                 return
             }
-            controller.freezeDemoCurl()
+            if ScreenshotMode.target == "slide" { controller.freezeDemoSlide() } else { controller.freezeDemoCurl() }
         }
     }
 
@@ -164,7 +167,13 @@ struct ReaderView: View {
 
     private func pushSettings() {
         controller.applySettings(layoutMode: settings.layoutMode, rightToLeft: rtl, style: textStyle,
-                                 coverAlone: settings.coverAlone, showStack: settings.pageStack, softness: CGFloat(settings.curlSoftness))
+                                 coverAlone: settings.coverAlone, showStack: settings.pageStack, softness: CGFloat(settings.curlSoftness),
+                                 slide: slide)
+    }
+
+    private func flashHint() {
+        withAnimation { showHint = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { withAnimation { showHint = false } }
     }
 
     private func savePosition() {
@@ -256,7 +265,15 @@ struct ReaderView: View {
                         .frame(minWidth: 70, alignment: .leading)
                     Spacer()
                     ChromeButton(desk: desk, systemName: "list.bullet", size: 36) { settings.tap(); showContents = true }
-                    ChromeButton(desk: desk, systemName: settings.layoutMode.symbol, size: 36, active: settings.layoutMode != .auto) {
+                    ChromeButton(desk: desk, systemName: "rectangle.split.2x1", size: 36, active: slide) {
+                        // Per-book switch: picture books can slide while novels keep the paper curl.
+                        settings.tap()
+                        let turningOn = !slide
+                        library.setTurnStyle(liveBook, turningOn ? "slide" : "curl")
+                        if turningOn { flashHint() }
+                    }
+                    .accessibilityLabel(L10n.turnSlide)
+                    ChromeButton(desk: desk, systemName: settings.layoutMode.symbol, size: 36, active: settings.layoutMode != .auto, disabled: slide) {
                         settings.tap()
                         let all = LayoutMode.allCases
                         let i = all.firstIndex(of: settings.layoutMode) ?? 0
@@ -292,7 +309,7 @@ struct ReaderView: View {
     private func hintPill(_ desk: DeskStyle) -> some View {
         VStack {
             Spacer()
-            Text(L10n.readerHint)
+            Text(slide ? L10n.slideHint : L10n.readerHint)
                 .font(DuoFont.caption(12))
                 .foregroundStyle(desk.ink)
                 .padding(.horizontal, 16).padding(.vertical, 9)

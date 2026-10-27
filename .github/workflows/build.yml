@@ -2,30 +2,31 @@ name: Build and Upload to App Store
 
 on:
   push:
-    branches: [master]
+    branches: [master, 'dev/**']
   workflow_dispatch:
 
 env:
-  # flip to "true" once the App Store Connect app record exists
-  ASC_READY: "true"
+  # Upload and review submission happen only from master; dev branches stop after screenshots.
+  ASC_READY: ${{ github.ref == 'refs/heads/master' && 'true' || 'false' }}
 
 jobs:
   build:
-    runs-on: macos-latest
+    # iOS 27.1 SDK is required for the app to fill the iPhone Duo screens.
+    runs-on: xcode-27
 
     steps:
     - uses: actions/checkout@v6
 
     - name: Select Xcode
       run: |
-        XCODE_APP=$(ls /Applications/ | grep -E "^Xcode_2[6-9]|^Xcode_[3-9][0-9]" | sort -V | tail -1)
-        if [ -n "$XCODE_APP" ]; then
-          sudo xcode-select -s "/Applications/$XCODE_APP"
+        if [ -d /Applications/Xcode_27.1.app ]; then
+          sudo xcode-select -s /Applications/Xcode_27.1.app
         else
-          XCODE_APP=$(ls /Applications/ | grep "^Xcode_" | sort -V | tail -1)
+          XCODE_APP=$(ls /Applications/ | grep -E "^Xcode_27\.[0-9.]*app$" | sort -V | tail -1)
           sudo xcode-select -s "/Applications/$XCODE_APP"
         fi
         xcodebuild -version
+        xcodebuild -showsdks | grep -i iphoneos
 
     - name: Install XcodeGen
       run: brew install xcodegen
@@ -64,7 +65,7 @@ jobs:
         xcrun simctl bootstatus "$IPHONE"
         xcrun simctl install "$IPHONE" "$APP"
         mkdir -p shots/iphone
-        for shot in library reader; do
+        for shot in library reader slide; do
           xcrun simctl terminate "$IPHONE" com.tokyonasu.ViewerDUO || true
           xcrun simctl launch "$IPHONE" com.tokyonasu.ViewerDUO -AppleLanguages "(ja)" -AppleLocale ja_JP -screenshot $shot || true
           sleep 10
@@ -81,7 +82,7 @@ jobs:
         xcrun simctl bootstatus "$IPAD"
         xcrun simctl install "$IPAD" "$APPPAD"
         mkdir -p shots/ipad
-        for shot in library reader; do
+        for shot in library reader slide; do
           xcrun simctl terminate "$IPAD" com.tokyonasu.ViewerDUO || true
           xcrun simctl launch "$IPAD" com.tokyonasu.ViewerDUO -AppleLanguages "(ja)" -AppleLocale ja_JP -screenshot $shot || true
           sleep 10
@@ -89,11 +90,31 @@ jobs:
         done
         ls -la shots/iphone shots/ipad
 
+    - name: Capture iPhone Duo screenshots (check only, not uploaded)
+      continue-on-error: true
+      run: |
+        DUO=$(xcrun simctl list devices available | grep -oE "iPhone Duo" | head -1)
+        [ -z "$DUO" ] && { echo "no iPhone Duo simulator"; exit 0; }
+        APP=$(find build/sim/Build/Products -maxdepth 3 -name "*.app" | head -1)
+        xcrun simctl boot "$DUO" || true
+        xcrun simctl bootstatus "$DUO"
+        xcrun simctl install "$DUO" "$APP"
+        mkdir -p duo
+        for shot in library reader slide; do
+          xcrun simctl terminate "$DUO" com.tokyonasu.ViewerDUO || true
+          xcrun simctl launch "$DUO" com.tokyonasu.ViewerDUO -AppleLanguages "(ja)" -AppleLocale ja_JP -screenshot $shot || true
+          sleep 10
+          xcrun simctl io "$DUO" screenshot duo/$shot.png
+        done
+        ls -la duo
+
     - name: Upload screenshots artifact
       uses: actions/upload-artifact@v4
       with:
         name: screenshots
-        path: shots
+        path: |
+          shots
+          duo
 
     - name: Set up ASC API Key
       if: env.ASC_READY == 'true'
@@ -134,6 +155,10 @@ jobs:
     - name: Install PyJWT
       if: env.ASC_READY == 'true'
       run: pip3 install --break-system-packages PyJWT requests Pillow
+
+    - name: Prepare App Store version
+      if: env.ASC_READY == 'true'
+      run: python3 scripts/prepare_version.py
 
     - name: Upload Screenshots
       if: env.ASC_READY == 'true'

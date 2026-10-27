@@ -13,7 +13,7 @@ struct LibraryView: View {
     @State private var query = ""
 
     private var importTypes: [UTType] {
-        var t: [UTType] = [.pdf, .epub, .plainText, .text, .zip, .archive]
+        var t: [UTType] = [.pdf, .epub, .plainText, .text, .zip, .archive, .image, .folder]
         for id in ["com.rarlab.rar-archive", "com.tokyonasu.cbz", "com.tokyonasu.cbr"] {
             if let u = UTType(id) { t.append(u) }
         }
@@ -66,6 +66,16 @@ struct LibraryView: View {
                 addButton(desk)
                     .padding(.bottom, 18)
             }
+            if library.importing {
+                VStack(spacing: 12) {
+                    ProgressView().tint(desk.accent).scaleEffect(1.2)
+                    Text(L10n.importing).font(DuoFont.body(13)).foregroundStyle(desk.ink.opacity(0.85))
+                }
+                .padding(24)
+                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.ultraThinMaterial))
+                .transition(.opacity)
+                .zIndex(4)
+            }
             if let book = openBook {
                 // Presented inline rather than as a cover so the reader owns the whole window on every device.
                 ReaderView(book: book) {
@@ -91,9 +101,15 @@ struct LibraryView: View {
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: importTypes, allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
-            var failed = false
-            for u in urls where library.importFile(from: u) == nil { failed = true }
-            importFailed = failed
+            Task {
+                let r = await library.importFiles(urls)
+                importFailed = r.failed > 0
+            }
+        }
+        .onChange(of: library.pendingOpen) { _, b in
+            guard let b else { return }
+            library.pendingOpen = nil
+            withAnimation(.easeInOut(duration: 0.3)) { openBook = b }
         }
         .alert(L10n.importFailed, isPresented: $importFailed) {
             Button(L10n.ok, role: .cancel) {}
@@ -112,6 +128,9 @@ struct LibraryView: View {
         .onAppear {
             if ScreenshotMode.target == "reader", let first = library.sorted(by: "added").last {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openBook = first }
+            }
+            if ScreenshotMode.target == "slide", let pics = library.books.first(where: { $0.format == .images }) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openBook = pics }
             }
         }
     }

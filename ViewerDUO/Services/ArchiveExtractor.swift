@@ -8,7 +8,7 @@ enum ArchiveError: Error {
 
 /// Extracts ZIP/CBZ/RAR/CBR image archives into the cache and returns image page URLs in natural order.
 enum ArchiveExtractor {
-    static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "tif", "tiff"]
+    static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "tif", "tiff", "avif"]
 
     static func imagePages(fileURL: URL, format: BookFormat, bookID: UUID) throws -> [URL] {
         let dir = Library.cacheDir(for: bookID)

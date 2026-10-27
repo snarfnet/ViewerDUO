@@ -39,10 +39,14 @@ final class TextSource: PageSource {
 
     convenience init(plainTextURL url: URL, title: String) {
         let data = (try? Data(contentsOf: url)) ?? Data()
-        let text = String(data: data, encoding: .utf8)
+        let bom = [UInt8](data.prefix(2))
+        let utf16 = bom == [0xFF, 0xFE] || bom == [0xFE, 0xFF]
+        let decoded = (utf16 ? String(data: data, encoding: .utf16) : nil)
+            ?? String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .shiftJIS)
             ?? String(data: data, encoding: .japaneseEUC)
             ?? String(decoding: data, as: UTF8.self)
+        let text = decoded.hasPrefix("\u{FEFF}") ? String(decoded.dropFirst()) : decoded
         self.init(chapters: RichText.fromPlainText(text, fallbackTitle: title), title: title)
     }
 

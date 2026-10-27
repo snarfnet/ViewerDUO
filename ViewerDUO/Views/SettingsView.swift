@@ -84,6 +84,13 @@ struct SettingsView: View {
                             Text(L10n.on).tag("on")
                             Text(L10n.off).tag("off")
                         }
+                        Picker(L10n.turnStyle, selection: Binding(
+                            get: { (currentBook ?? book).turnStyle ?? "global" },
+                            set: { v in library.setTurnStyle(book, v == "global" ? nil : v) })) {
+                            Text(L10n.followGlobal).tag("global")
+                            Text(L10n.turnCurl).tag("curl")
+                            Text(L10n.turnSlide).tag("slide")
+                        }
                         if book.format.isReflowable {
                             Picker(L10n.vertical, selection: Binding(
                                 get: { (currentBook ?? book).verticalText.map { $0 ? "on" : "off" } ?? "global" },
@@ -102,6 +109,10 @@ struct SettingsView: View {
                             ForEach(LayoutMode.allCases) { m in
                                 Label(m.name, systemImage: m.symbol).tag(m)
                             }
+                        }
+                        Picker(L10n.turnStyle, selection: $settings.turnStyle) {
+                            Text(L10n.turnCurl).tag("curl")
+                            Text(L10n.turnSlide).tag("slide")
                         }
                         Toggle(L10n.coverAlone, isOn: $settings.coverAlone)
                         Toggle(L10n.pageStack, isOn: $settings.pageStack)

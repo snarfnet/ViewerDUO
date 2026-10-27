@@ -94,7 +94,9 @@ final class CurlEngine {
 
     // MARK: - Page bookkeeping
 
-    var slots: SpreadSlots {
+    var slots: SpreadSlots { slots(forPage: page) }
+
+    func slots(forPage page: Int) -> SpreadSlots {
         if !layout.spread { return SpreadSlots(first: page - 1, second: page) }
         let k = coverAlone ? (page + 1) / 2 : page / 2
         let first = coverAlone ? 2 * k - 1 : 2 * k
@@ -295,6 +297,21 @@ final class CurlEngine {
 
     func cancelTurn() {
         turn = nil
+    }
+
+    /// The page shown after moving one spread forward (+1) or back (-1).
+    func neighbourPage(_ direction: Int) -> Int {
+        let s = slots
+        let p = layout.spread ? (direction > 0 ? s.second + 1 : max(0, s.first - 1)) : page + direction
+        return min(max(0, p), pageCount - 1)
+    }
+
+    /// Jumps one spread without a curl (used by the slide mode once its animation lands).
+    func step(_ direction: Int) {
+        turn = nil
+        page = neighbourPage(direction)
+        onPageChanged?(page)
+        onTurnCommitted?()
     }
 
     // MARK: - Curl geometry for rendering

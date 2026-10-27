@@ -2,6 +2,8 @@ import Foundation
 
 enum BookFormat: String, Codable, CaseIterable {
     case pdf, epub, txt, zip, rar
+    /// A folder of numbered image files copied into the library.
+    case images
 
     static func from(ext: String) -> BookFormat? {
         switch ext.lowercased() {
@@ -21,10 +23,12 @@ enum BookFormat: String, Codable, CaseIterable {
         case .txt: return "TEXT"
         case .zip: return "ZIP"
         case .rar: return "RAR"
+        case .images: return "IMG"
         }
     }
 
     var isImageArchive: Bool { self == .zip || self == .rar }
+    var isImageBook: Bool { isImageArchive || self == .images }
     /// Text-based formats are re-paginated whenever the page size or typography changes.
     var isReflowable: Bool { self == .txt || self == .epub }
 }
@@ -53,11 +57,13 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
     /// Per-book overrides; nil means "follow the global setting".
     var rightToLeft: Bool?
     var verticalText: Bool?
+    /// "curl" or "slide"; nil follows the global setting.
+    var turnStyle: String?
     var hue: Double
 
     init(id: UUID, title: String, author: String = "", fileName: String, format: BookFormat, addedAt: Date,
          lastOpened: Date? = nil, lastPage: Int = 0, lastOffset: Int = 0, pageCount: Int = 0,
-         bookmarks: [Bookmark] = [], rightToLeft: Bool? = nil, verticalText: Bool? = nil, hue: Double? = nil) {
+         bookmarks: [Bookmark] = [], rightToLeft: Bool? = nil, verticalText: Bool? = nil, turnStyle: String? = nil, hue: Double? = nil) {
         self.id = id
         self.title = title
         self.author = author
@@ -71,11 +77,12 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
         self.bookmarks = bookmarks
         self.rightToLeft = rightToLeft
         self.verticalText = verticalText
+        self.turnStyle = turnStyle
         self.hue = hue ?? Double(id.uuidString.unicodeScalars.reduce(0) { $0 + Int($1.value) } % 360) / 360.0
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, author, fileName, format, addedAt, lastOpened, lastPage, lastOffset, pageCount, bookmarks, rightToLeft, verticalText, hue
+        case id, title, author, fileName, format, addedAt, lastOpened, lastPage, lastOffset, pageCount, bookmarks, rightToLeft, verticalText, turnStyle, hue
     }
 
     init(from decoder: Decoder) throws {
@@ -94,6 +101,7 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
                   bookmarks: try c.decodeIfPresent([Bookmark].self, forKey: .bookmarks) ?? [],
                   rightToLeft: try c.decodeIfPresent(Bool.self, forKey: .rightToLeft),
                   verticalText: try c.decodeIfPresent(Bool.self, forKey: .verticalText),
+                  turnStyle: try c.decodeIfPresent(String.self, forKey: .turnStyle),
                   hue: try c.decodeIfPresent(Double.self, forKey: .hue))
     }
 

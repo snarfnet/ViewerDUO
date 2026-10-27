@@ -12,7 +12,7 @@ struct ViewerDUOApp: App {
                 .environmentObject(settings)
                 .tint(settings.desk.accent)
                 .onOpenURL { url in
-                    library.importFile(from: url)
+                    Task { await library.importAndOpen(url) }
                 }
         }
     }
