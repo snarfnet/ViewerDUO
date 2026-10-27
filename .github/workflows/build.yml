@@ -104,7 +104,8 @@ jobs:
           xcrun simctl terminate "$DUO" com.tokyonasu.ViewerDUO || true
           xcrun simctl launch "$DUO" com.tokyonasu.ViewerDUO -AppleLanguages "(ja)" -AppleLocale ja_JP -screenshot $shot || true
           sleep 10
-          xcrun simctl io "$DUO" screenshot duo/$shot.png
+          xcrun simctl io "$DUO" screenshot --display=3 duo/${shot}_inner.png || true
+          xcrun simctl io "$DUO" screenshot --display=1 duo/${shot}_outer.png || true
         done
         ls -la duo
 
