@@ -91,7 +91,10 @@ jobs:
         ls -la shots/iphone shots/ipad
 
     - name: Capture iPhone Duo screenshots (check only, not uploaded)
+      # A third booted simulator has knocked the preview runner offline; keep it to dev branches.
+      if: env.ASC_READY != 'true'
       continue-on-error: true
+      timeout-minutes: 12
       run: |
         DUO=$(xcrun simctl list devices available | grep -oE "iPhone Duo" | head -1)
         [ -z "$DUO" ] && { echo "no iPhone Duo simulator"; exit 0; }
