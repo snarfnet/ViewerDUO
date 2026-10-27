@@ -11,6 +11,8 @@ jobs:
         sudo xcode-select -s /Applications/Xcode_27.1.app
         SDK=$(xcrun --sdk iphoneos --show-sdk-path)
         echo "SDK=$SDK"
-        for f in $(find "$SDK/System/Library/Frameworks/UIKit.framework" "$SDK/System/Library/Frameworks/SwiftUI.framework" "$SDK/System/Library/Frameworks/SwiftUICore.framework" -name "*.swiftinterface" -path "*arm64e*" 2>/dev/null) $(find "$SDK/System/Library/Frameworks/UIKit.framework" -name "*.h"); do
-          grep -nHiE "reservedRegion|ReservedRegion|hinge|HingeInteraction|division|occlusion" "$f" | grep -v "^\s*//" | head -80
-        done | cut -c1-400 | head -300
+        U="$SDK/System/Library/Frameworks/UIKit.framework"
+        grep -v "^//" "$U/Headers/UIViewReservedRegion.h" | grep -v "^\s*$" | head -80
+        grep -v "^\s*$" "$U/Headers/UIHingeInteraction.h" | grep -vE "^\s*///" | head -60
+        I=$(find "$U" -name "arm64e-apple-ios.swiftinterface" | head -1)
+        sed -n '1965,2060p' "$I"
