@@ -28,6 +28,7 @@ final class TextSource: PageSource {
     let aspect: CGFloat = 1.45
     var isReflowable: Bool { true }
     var supportsSearch: Bool { true }
+    var supportsSpeech: Bool { true }
     /// Read from the main thread while the render queue may be re-paginating, so it goes through the lock.
     var pageCount: Int {
         lock.lock(); defer { lock.unlock() }
@@ -84,6 +85,18 @@ final class TextSource: PageSource {
             if self.offset(forPage: mid) <= offset { lo = mid } else { hi = mid - 1 }
         }
         return lo
+    }
+
+    func text(forPage page: Int) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        guard page >= 0, page < pages.count else { return nil }
+        let ref = pages[page]
+        if ref.image != nil { return "" }
+        let s = chapterTexts[ref.chapter].rich.string as NSString
+        let loc = min(max(0, ref.range.location), s.length)
+        let len = min(max(0, ref.range.length), s.length - loc)
+        return s.substring(with: NSRange(location: loc, length: len))
+            .replacingOccurrences(of: RichText.objectReplacement, with: "")
     }
 
     // MARK: - Layout

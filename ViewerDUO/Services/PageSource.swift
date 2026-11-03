@@ -22,6 +22,10 @@ protocol PageSource: AnyObject {
     /// Page containing character `offset` (reflowable only; `offset` is treated as a page index otherwise).
     func page(forOffset offset: Int) -> Int
     func search(_ query: String) -> [SearchHit]
+    /// Whether `text(forPage:)` can return words to read aloud.
+    var supportsSpeech: Bool { get }
+    /// The words printed on `page`, for reading aloud. Nil when the page has no text layer.
+    func text(forPage page: Int) -> String?
 }
 
 extension PageSource {
@@ -30,6 +34,8 @@ extension PageSource {
     func prepare(pageSize: CGSize, style: TextStyle) {}
     func search(_ query: String) -> [SearchHit] { [] }
     var supportsSearch: Bool { false }
+    var supportsSpeech: Bool { false }
+    func text(forPage page: Int) -> String? { nil }
 }
 
 enum PageRasterizer {
@@ -64,6 +70,7 @@ final class PDFSource: PageSource {
     let aspect: CGFloat
     var isReflowable: Bool { false }
     var supportsSearch: Bool { true }
+    var supportsSpeech: Bool { true }
 
     init?(url: URL) {
         guard let d = PDFDocument(url: url), d.pageCount > 0 else { return nil }
@@ -125,6 +132,11 @@ final class PDFSource: PageSource {
             hits.append(SearchHit(page: idx, snippet: snippet.trimmingCharacters(in: .whitespaces)))
         }
         return hits
+    }
+
+    func text(forPage page: Int) -> String? {
+        guard page >= 0, page < pageCount else { return nil }
+        return doc.page(at: page)?.string
     }
 }
 

@@ -5,6 +5,8 @@ struct ReaderView: View {
     @EnvironmentObject var library: Library
     @EnvironmentObject var settings: DuoSettings
     @StateObject private var controller = CurlController()
+    @StateObject private var autoReader = AutoReader()
+    @Environment(\.scenePhase) private var scenePhase
 
     let book: Book
     let onClose: () -> Void
@@ -14,6 +16,8 @@ struct ReaderView: View {
     @State private var showSearch = false
     @State private var zoomImage: UIImage?
     @State private var showHint = false
+    /// Overrides the usual hint text for one flash (read-aloud messages).
+    @State private var hintText: String?
     @State private var sliderValue: Double = 0
     @State private var sliderDragging = false
 
@@ -90,6 +94,7 @@ struct ReaderView: View {
             }
         }
         .onDisappear {
+            autoReader.stop()
             UIApplication.shared.isIdleTimerDisabled = false
             controller.stopAnimating()
             savePosition()
@@ -97,6 +102,14 @@ struct ReaderView: View {
         .onReceive(controller.$page) { p in
             if !sliderDragging { sliderValue = Double(p) }
             savePosition()
+            autoReader.controllerMoved()
+        }
+        .onChange(of: autoReader.mode) { _, mode in
+            UIApplication.shared.isIdleTimerDisabled = settings.keepAwake || mode != .off
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // No background audio: speech and timers stop with the app instead of losing their place.
+            if phase == .background { autoReader.stop() }
         }
         .onReceive(controller.$pageCount) { _ in savePosition() }
         .onChange(of: settings.layoutMode) { _, _ in pushSettings() }
@@ -157,6 +170,7 @@ struct ReaderView: View {
         controller.onTurnBegan = { settings.tap() }
         controller.onTurnCommitted = { settings.pageTurned() }
         controller.onBlocked = { settings.thud() }
+        autoReader.onNothingToRead = { flashHint(L10n.nothingToRead) }
         controller.onDoubleTap = { page in
             controller.renderForZoom(page: page) { img in
                 if let img { withAnimation { zoomImage = img } }
@@ -171,9 +185,59 @@ struct ReaderView: View {
                                  slide: slide)
     }
 
-    private func flashHint() {
+    private func flashHint(_ text: String? = nil) {
+        hintText = text
         withAnimation { showHint = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { withAnimation { showHint = false } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            withAnimation { showHint = false }
+            hintText = nil
+        }
+    }
+
+    private func startReadAloud() {
+        settings.tap()
+        autoReader.rate = Float(settings.speechRate)
+        autoReader.startSpeech(controller: controller)
+        withAnimation { chromeVisible = false }
+        flashHint(L10n.readingAloudHint)
+    }
+
+    private func startAutoTurn(_ seconds: Int) {
+        settings.tap()
+        autoReader.startTimer(controller: controller, interval: TimeInterval(seconds))
+        withAnimation { chromeVisible = false }
+        flashHint(L10n.autoTurnHint)
+    }
+
+    @ViewBuilder
+    private func autoReadButton(_ desk: DeskStyle) -> some View {
+        if autoReader.isActive {
+            ChromeButton(desk: desk, systemName: "stop.fill", size: 36, active: true) {
+                settings.tap()
+                autoReader.stop()
+            }
+            .accessibilityLabel(L10n.stopAuto)
+        } else {
+            Menu {
+                if controller.supportsSpeech {
+                    Button { startReadAloud() } label: { Label(L10n.readAloud, systemImage: "speaker.wave.2") }
+                }
+                Section(L10n.autoTurn) {
+                    ForEach([5, 10, 20, 30, 60], id: \.self) { s in
+                        Button { startAutoTurn(s) } label: { Text(String(format: L10n.everyNSeconds, s)) }
+                    }
+                }
+            } label: {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 36 * 0.42, weight: .medium))
+                    .foregroundStyle(desk.ink.opacity(0.92))
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(.ultraThinMaterial))
+                    .overlay(Circle().stroke(desk.ink.opacity(0.12), lineWidth: 0.6))
+            }
+            .disabled(controller.isLoading || controller.failed)
+            .accessibilityLabel(L10n.autoRead)
+        }
     }
 
     private func savePosition() {
@@ -264,6 +328,7 @@ struct ReaderView: View {
                         .foregroundStyle(desk.ink.opacity(0.85))
                         .frame(minWidth: 70, alignment: .leading)
                     Spacer()
+                    autoReadButton(desk)
                     ChromeButton(desk: desk, systemName: "list.bullet", size: 36) { settings.tap(); showContents = true }
                     ChromeButton(desk: desk, systemName: "rectangle.split.2x1", size: 36, active: slide) {
                         // Per-book switch: picture books can slide while novels keep the paper curl.
@@ -309,7 +374,7 @@ struct ReaderView: View {
     private func hintPill(_ desk: DeskStyle) -> some View {
         VStack {
             Spacer()
-            Text(slide ? L10n.slideHint : L10n.readerHint)
+            Text(hintText ?? (slide ? L10n.slideHint : L10n.readerHint))
                 .font(DuoFont.caption(12))
                 .foregroundStyle(desk.ink)
                 .padding(.horizontal, 16).padding(.vertical, 9)
