@@ -167,10 +167,12 @@ struct LibraryView: View {
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(.ultraThinMaterial))
                 }
+                .accessibilityLabel(L10n.sort)
                 ChromeButton(desk: desk, systemName: "gearshape", size: 38) {
                     settings.tap()
                     showSettings = true
                 }
+                .accessibilityLabel(L10n.settings)
             }
             if library.books.count > 6 {
                 HStack {

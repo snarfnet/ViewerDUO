@@ -297,10 +297,12 @@ struct ReaderView: View {
                 }
                 .frame(maxWidth: .infinity)
                 ChromeButton(desk: desk, systemName: isBookmarked ? "bookmark.fill" : "bookmark", size: 38, active: isBookmarked) { toggleBookmark() }
+                    .accessibilityLabel(isBookmarked ? L10n.removeBookmark : L10n.addBookmark)
                 ChromeButton(desk: desk, systemName: "magnifyingglass", size: 38, disabled: !controller.supportsSearch) {
                     settings.tap()
                     showSearch = true
                 }
+                .accessibilityLabel(L10n.search)
             }
         }
     }
@@ -312,6 +314,7 @@ struct ReaderView: View {
                     ChromeButton(desk: desk, systemName: rtl ? "chevron.right" : "chevron.left", size: 36, disabled: !controller.previousPageAvailable()) {
                         _ = controller.turn(direction: -1)
                     }
+                    .accessibilityLabel(L10n.previousPage)
                     Slider(value: $sliderValue, in: 0...Double(max(1, controller.pageCount - 1)), step: 1, onEditingChanged: { editing in
                         sliderDragging = editing
                         if !editing { controller.goTo(page: Int(sliderValue.rounded())) }
@@ -321,6 +324,7 @@ struct ReaderView: View {
                     ChromeButton(desk: desk, systemName: rtl ? "chevron.left" : "chevron.right", size: 36, disabled: !controller.nextPageAvailable()) {
                         _ = controller.turn(direction: 1)
                     }
+                    .accessibilityLabel(L10n.nextPage)
                 }
                 HStack(spacing: 12) {
                     Text("\(Int(sliderValue) + 1) / \(controller.pageCount)")
@@ -330,6 +334,7 @@ struct ReaderView: View {
                     Spacer()
                     autoReadButton(desk)
                     ChromeButton(desk: desk, systemName: "list.bullet", size: 36) { settings.tap(); showContents = true }
+                        .accessibilityLabel(L10n.chapters)
                     ChromeButton(desk: desk, systemName: "rectangle.split.2x1", size: 36, active: slide) {
                         // Per-book switch: picture books can slide while novels keep the paper curl.
                         settings.tap()
@@ -344,7 +349,10 @@ struct ReaderView: View {
                         let i = all.firstIndex(of: settings.layoutMode) ?? 0
                         settings.layoutMode = all[(i + 1) % all.count]
                     }
+                    .accessibilityLabel(L10n.layout)
+                    .accessibilityValue(settings.layoutMode.name)
                     ChromeButton(desk: desk, systemName: "textformat.size", size: 36) { settings.tap(); showSettings = true }
+                        .accessibilityLabel(L10n.settings)
                 }
             }
         }
