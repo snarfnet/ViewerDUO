@@ -114,12 +114,13 @@ enum EPUBParser {
     static func open(fileURL: URL, bookID: UUID) throws -> EPUBPackage {
         let dir = Library.cacheDir(for: bookID)
         let marker = dir.appendingPathComponent(".extracted")
-        if !FileManager.default.fileExists(atPath: marker.path) {
+        try ExtractionLock.run(bookID) {
+            guard !FileManager.default.fileExists(atPath: marker.path) else { return }
             try? FileManager.default.removeItem(at: dir)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let zip = try MiniZip(url: fileURL)
             for e in zip.entries where !e.isDirectory {
-                guard let rel = ArchiveExtractor.safeRelativePath(e.name) else { continue }
+                guard let rel = ArchiveExtractor.safeRelativePath(e.name.replacingOccurrences(of: "\\", with: "/")) else { continue }
                 let out = dir.appendingPathComponent(rel)
                 try FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
                 if let d = try? zip.extract(e) { try d.write(to: out) }

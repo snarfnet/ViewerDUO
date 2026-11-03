@@ -106,6 +106,11 @@ struct LibraryView: View {
                 importFailed = r.failed > 0
             }
         }
+        .onChange(of: library.externalImportFailed) { _, failed in
+            guard failed else { return }
+            library.externalImportFailed = false
+            importFailed = true
+        }
         .onChange(of: library.pendingOpen) { _, b in
             guard let b else { return }
             library.pendingOpen = nil
