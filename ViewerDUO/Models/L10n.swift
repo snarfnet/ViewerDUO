@@ -120,4 +120,13 @@ enum L10n {
         Every book stays on your device. Nothing is uploaded.
         """)
     }
+
+    /// "読書 1時間5分" / "Read 1h 5m"; nil under a minute.
+    static func readingTime(_ seconds: Double) -> String? {
+        let minutes = Int(seconds / 60)
+        guard minutes >= 1 else { return nil }
+        let h = minutes / 60, m = minutes % 60
+        if h > 0 { return t("読書 \(h)時間\(m)分", "Read \(h)h \(m)m") }
+        return t("読書 \(m)分", "Read \(m)m")
+    }
 }

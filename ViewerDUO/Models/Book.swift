@@ -60,10 +60,12 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
     /// "curl" or "slide"; nil follows the global setting.
     var turnStyle: String?
     var hue: Double
+    /// Time spent with the book open in the foreground, in seconds.
+    var readingSeconds: Double
 
     init(id: UUID, title: String, author: String = "", fileName: String, format: BookFormat, addedAt: Date,
          lastOpened: Date? = nil, lastPage: Int = 0, lastOffset: Int = 0, pageCount: Int = 0,
-         bookmarks: [Bookmark] = [], rightToLeft: Bool? = nil, verticalText: Bool? = nil, turnStyle: String? = nil, hue: Double? = nil) {
+         bookmarks: [Bookmark] = [], rightToLeft: Bool? = nil, verticalText: Bool? = nil, turnStyle: String? = nil, hue: Double? = nil, readingSeconds: Double = 0) {
         self.id = id
         self.title = title
         self.author = author
@@ -78,11 +80,12 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
         self.rightToLeft = rightToLeft
         self.verticalText = verticalText
         self.turnStyle = turnStyle
+        self.readingSeconds = readingSeconds
         self.hue = hue ?? Double(id.uuidString.unicodeScalars.reduce(0) { $0 + Int($1.value) } % 360) / 360.0
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, author, fileName, format, addedAt, lastOpened, lastPage, lastOffset, pageCount, bookmarks, rightToLeft, verticalText, turnStyle, hue
+        case id, title, author, fileName, format, addedAt, lastOpened, lastPage, lastOffset, pageCount, bookmarks, rightToLeft, verticalText, turnStyle, hue, readingSeconds
     }
 
     init(from decoder: Decoder) throws {
@@ -102,7 +105,8 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
                   rightToLeft: try c.decodeIfPresent(Bool.self, forKey: .rightToLeft),
                   verticalText: try c.decodeIfPresent(Bool.self, forKey: .verticalText),
                   turnStyle: try c.decodeIfPresent(String.self, forKey: .turnStyle),
-                  hue: try c.decodeIfPresent(Double.self, forKey: .hue))
+                  hue: try c.decodeIfPresent(Double.self, forKey: .hue),
+                  readingSeconds: try c.decodeIfPresent(Double.self, forKey: .readingSeconds) ?? 0)
     }
 
     var progress: Double {

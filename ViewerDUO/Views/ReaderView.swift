@@ -20,6 +20,8 @@ struct ReaderView: View {
     @State private var hintText: String?
     @State private var sliderValue: Double = 0
     @State private var sliderDragging = false
+    /// Start of the reading time not yet added to the book.
+    @State private var clockStart: Date?
 
     private var liveBook: Book { library.book(withID: book.id) ?? book }
     private var rtl: Bool { liveBook.rightToLeft ?? settings.rightToLeft }
@@ -85,6 +87,7 @@ struct ReaderView: View {
             library.markOpened(book)
             controller.open(book: book, url: library.fileURL(for: book), startPage: book.lastPage, startOffset: book.lastOffset)
             UIApplication.shared.isIdleTimerDisabled = settings.keepAwake
+            if !ScreenshotMode.isActive { clockStart = Date() }
             if ScreenshotMode.target == "reader" || ScreenshotMode.target == "slide" {
                 scheduleDemoCurl(attempt: 0)
             } else if !UserDefaults.standard.bool(forKey: "readerHintShown") {
@@ -97,11 +100,13 @@ struct ReaderView: View {
             autoReader.stop()
             UIApplication.shared.isIdleTimerDisabled = false
             controller.stopAnimating()
-            savePosition()
+            savePosition(stopClock: true)
         }
         .onReceive(controller.$page) { p in
             if !sliderDragging { sliderValue = Double(p) }
-            savePosition()
+            // $page fires before the controller stores the new value; reading controller.page here saved the
+            // previous page (opening a PDF at page 50 wrote page 0 until the next turn).
+            DispatchQueue.main.async { savePosition() }
             autoReader.controllerMoved()
         }
         .onChange(of: autoReader.mode) { _, mode in
@@ -110,6 +115,9 @@ struct ReaderView: View {
         .onChange(of: scenePhase) { _, phase in
             // No background audio: speech and timers stop with the app instead of losing their place.
             if phase == .background { autoReader.stop() }
+            // Save on the way out: an app closed from the switcher never gets onDisappear.
+            if phase != .active { savePosition(stopClock: true) }
+            else if clockStart == nil, !ScreenshotMode.isActive { clockStart = Date() }
         }
         .onReceive(controller.$pageCount) { _ in savePosition() }
         .onChange(of: settings.layoutMode) { _, _ in pushSettings() }
@@ -240,9 +248,20 @@ struct ReaderView: View {
         }
     }
 
-    private func savePosition() {
-        guard !controller.isLoading, controller.source != nil else { return }
-        library.update(book, page: controller.page, offset: controller.currentOffset, pageCount: controller.pageCount)
+    private func savePosition(stopClock: Bool = false) {
+        // Reading time: the stretch since the last save, at most 10 minutes so a book left open on the desk
+        // does not count as hours of reading.
+        var seconds: Double = 0
+        if let start = clockStart {
+            seconds = min(max(0, Date().timeIntervalSince(start)), 600)
+            clockStart = stopClock ? nil : Date()
+        }
+        guard !controller.isLoading, controller.source != nil else {
+            if seconds > 0 { library.addReadingTime(book, seconds: seconds) }
+            return
+        }
+        library.update(book, page: controller.page, offset: controller.currentOffset, pageCount: controller.pageCount,
+                       readingSeconds: seconds)
     }
 
     private var isBookmarked: Bool {
@@ -464,7 +483,11 @@ struct ContentsSheet: View {
                                 }
                             }
                             .onDelete { idx in
-                                for i in idx { library.removeBookmark(book, id: liveBook.bookmarks[i].id) }
+                                // Take the ids first: liveBook shrinks after each removal, so later indices would point
+                                // at the wrong bookmark or past the end.
+                                let marks = liveBook.bookmarks
+                                let ids = idx.compactMap { $0 < marks.count ? marks[$0].id : nil }
+                                for id in ids { library.removeBookmark(book, id: id) }
                             }
                         }
                         .listStyle(.plain)

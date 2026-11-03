@@ -293,11 +293,18 @@ final class Library: ObservableObject {
         save()
     }
 
-    func update(_ book: Book, page: Int, offset: Int, pageCount: Int? = nil) {
+    func update(_ book: Book, page: Int, offset: Int, pageCount: Int? = nil, readingSeconds: Double = 0) {
         guard let i = books.firstIndex(where: { $0.id == book.id }) else { return }
+        if readingSeconds > 0 { books[i].readingSeconds += readingSeconds }
         books[i].lastPage = page
         books[i].lastOffset = offset
         if let pc = pageCount, pc > 0 { books[i].pageCount = pc }
+        save()
+    }
+
+    func addReadingTime(_ book: Book, seconds: Double) {
+        guard seconds > 0, let i = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[i].readingSeconds += seconds
         save()
     }
 
@@ -420,7 +427,9 @@ final class CoverStore {
         lock.lock()
         if let m = memory[id] { lock.unlock(); return m }
         lock.unlock()
-        guard let img = UIImage(contentsOfFile: Library.coverURL(for: id).path) else { return nil }
+        // Decode once here; a lazily decoded JPEG was decoded again on the main thread every time a card redrew.
+        guard let file = UIImage(contentsOfFile: Library.coverURL(for: id).path) else { return nil }
+        let img = file.preparingForDisplay() ?? file
         lock.lock()
         memory[id] = img
         lock.unlock()

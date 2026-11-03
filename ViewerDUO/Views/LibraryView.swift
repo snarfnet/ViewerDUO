@@ -323,6 +323,9 @@ struct BookCard: View {
                 }
                 .frame(height: 3)
             }
+            if let time = L10n.readingTime(book.readingSeconds) {
+                Text(time).font(DuoFont.caption(10)).foregroundStyle(desk.ink.opacity(0.55)).lineLimit(1)
+            }
         }
     }
 }
