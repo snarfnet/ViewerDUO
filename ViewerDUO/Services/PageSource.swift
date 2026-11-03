@@ -88,7 +88,9 @@ final class PDFSource: PageSource {
             for i in 0..<n.numberOfChildren {
                 guard let c = n.child(at: i) else { continue }
                 if let pg = c.destination?.page, let label = c.label, !label.isEmpty {
-                    out.append(Chapter(title: label, page: doc.index(for: pg), depth: depth))
+                    // index(for:) answers NSNotFound for a page outside this document; "page + 1" on that would trap.
+                    let idx = doc.index(for: pg)
+                    if idx >= 0, idx < doc.pageCount { out.append(Chapter(title: label, page: idx, depth: depth)) }
                 }
                 if depth < 2 { walk(c, depth: depth + 1) }
             }
@@ -113,6 +115,7 @@ final class PDFSource: PageSource {
         for s in sels.prefix(400) {
             guard let pg = s.pages.first else { continue }
             let idx = doc.index(for: pg)
+            guard idx >= 0, idx < pageCount else { continue }
             if seen[idx, default: 0] >= 3 { continue }
             seen[idx, default: 0] += 1
             let ext = s.copy() as? PDFSelection

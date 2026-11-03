@@ -49,7 +49,7 @@ struct MiniZip {
         var q = cdOffset
         var list: [MiniZipEntry] = []
         for _ in 0..<count {
-            guard q + 46 <= n, u32(q) == 0x02014b50 else { throw MiniZipError.corrupt }
+            guard q >= 0, q + 46 <= n, u32(q) == 0x02014b50 else { throw MiniZipError.corrupt }
             let method = u16(q + 10)
             let comp = u32(q + 20)
             let uncomp = u32(q + 24)
@@ -57,6 +57,8 @@ struct MiniZip {
             let extraLen = u16(q + 30)
             let commentLen = u16(q + 32)
             let local = u32(q + 42)
+            // A damaged directory can claim a name longer than the file; reading it would trap.
+            guard q + 46 + nameLen <= n else { throw MiniZipError.corrupt }
             let nameStart = data.startIndex + q + 46
             let nameData = data[nameStart..<(nameStart + nameLen)]
             let name = String(data: nameData, encoding: .utf8)
@@ -70,7 +72,11 @@ struct MiniZip {
         entries = list
     }
 
+    /// Entries claiming more than this are refused so a hostile or broken archive cannot exhaust memory.
+    static let maxEntrySize = 512 * 1024 * 1024
+
     func extract(_ entry: MiniZipEntry) throws -> Data {
+        guard entry.uncompressedSize <= Self.maxEntrySize, entry.compressedSize <= Self.maxEntrySize else { throw MiniZipError.corrupt }
         let lho = entry.localHeaderOffset
         guard lho + 30 <= data.count, u32(lho) == 0x04034b50 else { throw MiniZipError.corrupt }
         let nameLen = u16(lho + 26)
