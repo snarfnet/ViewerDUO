@@ -160,7 +160,7 @@ enum RichText {
     }
 
     private static func endsWithNewline(_ s: NSMutableAttributedString) -> Bool {
-        s.length == 0 || s.string.hasSuffix("\n")
+        s.length == 0 || s.mutableString.hasSuffix("\n")
     }
 
     private static func attributes(_ ctx: WalkContext) -> [NSAttributedString.Key: Any] {
@@ -198,7 +198,7 @@ enum RichText {
 
     private static func newline(_ out: NSMutableAttributedString, ctx: WalkContext) {
         // Remove a trailing space before closing the block.
-        if out.string.hasSuffix(" ") { out.deleteCharacters(in: NSRange(location: out.length - 1, length: 1)) }
+        if out.mutableString.hasSuffix(" ") { out.deleteCharacters(in: NSRange(location: out.length - 1, length: 1)) }
         if !endsWithNewline(out) { out.append(NSAttributedString(string: "\n", attributes: attributes(ctx))) }
     }
 
@@ -276,7 +276,7 @@ enum RichText {
     }
 
     private static func trimTrailingNewlines(_ s: NSMutableAttributedString) {
-        while s.length > 0, s.string.hasSuffix("\n\n") {
+        while s.length > 0, s.mutableString.hasSuffix("\n\n") {
             s.deleteCharacters(in: NSRange(location: s.length - 1, length: 1))
         }
     }

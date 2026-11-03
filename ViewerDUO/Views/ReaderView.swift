@@ -549,6 +549,8 @@ struct ZoomableImage: UIViewRepresentable {
     }
 
     func updateUIView(_ sv: UIScrollView, context: Context) {
+        // Resetting the frame while zoomed in threw the reader back to the unzoomed picture.
+        guard sv.zoomScale <= 1.001 else { return }
         context.coordinator.imageView?.frame = CGRect(origin: .zero, size: sv.bounds.size)
         sv.contentSize = sv.bounds.size
     }

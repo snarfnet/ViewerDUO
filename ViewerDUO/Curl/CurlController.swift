@@ -59,6 +59,11 @@ final class CurlController: ObservableObject {
         }
     }
 
+    deinit {
+        // The display link retains its target, not the controller; without this it kept firing after the reader closed.
+        link?.invalidate()
+    }
+
     var currentOffset: Int { source?.offset(forPage: page) ?? page }
 
     // MARK: - Loading
@@ -208,6 +213,7 @@ final class CurlController: ObservableObject {
             let st = style
             let token = loadToken
             isLoading = true
+            store?.suspend()
             renderQueue.async { [weak self] in
                 let offset = pending ?? source.offset(forPage: currentPage)
                 source.prepare(pageSize: size, style: st)

@@ -28,7 +28,11 @@ final class TextSource: PageSource {
     let aspect: CGFloat = 1.45
     var isReflowable: Bool { true }
     var supportsSearch: Bool { true }
-    var pageCount: Int { max(1, pages.count) }
+    /// Read from the main thread while the render queue may be re-paginating, so it goes through the lock.
+    var pageCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return max(1, pages.count)
+    }
     var totalCharacters: Int { chapterOffsets.last ?? 0 }
 
     init(chapters: [ChapterText], title: String) {
@@ -135,8 +139,9 @@ final class TextSource: PageSource {
                 }
                 // Text runs up to the next picture; a gap of nothing but line breaks gets no page.
                 let end = next < pictures.count ? pictures[next].0 : len
-                if plain.substring(with: NSRange(location: start, length: end - start))
-                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // Look for the first visible character instead of copying the rest of the chapter on every page:
+                // the copy made pagination quadratic and a long TXT without headings took minutes.
+                if plain.rangeOfCharacter(from: Self.inkCharacters, options: [], range: NSRange(location: start, length: end - start)).location == NSNotFound {
                     start = end
                     continue
                 }
@@ -162,6 +167,8 @@ final class TextSource: PageSource {
             chapterTexts.count > 1 ? Chapter(title: c.title, page: starts[i]) : nil
         }
     }
+
+    private static let inkCharacters = CharacterSet.whitespacesAndNewlines.inverted
 
     private static func frameAttributes(vertical: Bool) -> CFDictionary? {
         guard vertical else { return nil }
@@ -316,7 +323,10 @@ final class TextSource: PageSource {
             // Vertical text keeps the marker; pagination turns each picture into a page of its own.
             if style.vertical { continue }
             guard let natural = imageSize(url) else {
-                out.replaceCharacters(in: range, with: "")
+                // Keep the length: page ranges index this string while offsets, bookmarks and search use the
+                // unstyled text, so deleting characters here shifted every saved position after the picture.
+                out.removeAttribute(.duoImage, range: range)
+                out.replaceCharacters(in: NSRange(location: range.location, length: 1), with: " ")
                 continue
             }
             let maxW = textRect.width

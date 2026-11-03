@@ -13,6 +13,9 @@ final class PageTextureStore {
     private(set) var scale: CGFloat = 2
     private var style: TextStyle?
     private var source: PageSource?
+    /// While a text book is re-paginated the old textures stay on screen but nothing new is rendered;
+    /// a render queued with the old page size would make the source lay itself out again for that size.
+    private var suspended = false
     /// Called on the main thread whenever a texture becomes available.
     var onReady: (() -> Void)?
 
@@ -22,6 +25,7 @@ final class PageTextureStore {
     }
 
     func configure(source: PageSource?, pageSize: CGSize, scale: CGFloat, style: TextStyle) {
+        suspended = false
         let changed = source !== self.source || pageSize != self.pageSize || scale != self.scale || style != self.style
         guard changed else { return }
         self.source = source
@@ -31,6 +35,10 @@ final class PageTextureStore {
         generation += 1
         textures.removeAll()
         pending.removeAll()
+    }
+
+    func suspend() {
+        suspended = true
     }
 
     func invalidate() {
@@ -52,7 +60,7 @@ final class PageTextureStore {
     }
 
     private func request(_ page: Int) {
-        guard let source, let style, pageSize.width > 10, !pending.contains(page), page >= 0, page < source.pageCount else { return }
+        guard !suspended, let source, let style, pageSize.width > 10, !pending.contains(page), page >= 0, page < source.pageCount else { return }
         pending.insert(page)
         let gen = generation
         let size = pageSize, sc = scale
