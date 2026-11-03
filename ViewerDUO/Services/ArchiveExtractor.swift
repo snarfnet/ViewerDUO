@@ -62,7 +62,8 @@ enum ArchiveExtractor {
             guard imageExtensions.contains(ext) else { continue }
             let out = dir.appendingPathComponent(rel)
             try FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if let d = try? zip.extract(e) { try d.write(to: out) }
+            // One page at a time: without the pool a large archive kept every extracted page in memory until the loop ended.
+            try autoreleasepool { if let d = try? zip.extract(e) { try d.write(to: out) } }
         }
     }
 
@@ -76,7 +77,7 @@ enum ArchiveExtractor {
             guard imageExtensions.contains(ext) else { continue }
             let out = dir.appendingPathComponent(rel)
             try FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if let d = try? archive.extract(e) { try d.write(to: out) }
+            try autoreleasepool { if let d = try? archive.extract(e) { try d.write(to: out) } }
         }
     }
 

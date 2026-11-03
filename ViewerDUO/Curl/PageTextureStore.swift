@@ -66,8 +66,10 @@ final class PageTextureStore {
         let size = pageSize, sc = scale
         queue.async { [weak self] in
             guard let self else { return }
-            let image = source.render(page: page, size: size, scale: sc, style: style)
-            let tex = image.flatMap { self.renderer.makeTexture(from: $0) }
+            // Large PDF pages leave autoreleased bitmaps behind; drain them per page.
+            let tex: MTLTexture? = autoreleasepool {
+                source.render(page: page, size: size, scale: sc, style: style).flatMap { self.renderer.makeTexture(from: $0) }
+            }
             DispatchQueue.main.async {
                 guard gen == self.generation else { return }
                 self.pending.remove(page)
