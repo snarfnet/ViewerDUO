@@ -11,7 +11,7 @@ struct PageCurlView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(controller: controller) }
 
     func makeUIView(context: Context) -> MTKView {
-        let view = CurlMTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
+        let view: CurlMTKView = CurlMTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
         view.colorPixelFormat = .bgra8Unorm
         view.depthStencilPixelFormat = .depth32Float
         view.sampleCount = 4
@@ -43,6 +43,14 @@ struct PageCurlView: UIViewRepresentable {
         single.require(toFail: double)
         view.addGestureRecognizer(single)
         context.coordinator.view = view
+        // Hardware keyboard and VoiceOver turn pages through the same animated path as a tap.
+        let c = controller
+        view.onStep = { [weak c] direction in _ = c?.turn(direction: direction) }
+        view.onActivate = { [weak c] in c?.onCenterTap?() }
+        view.isAccessibilityElement = true
+        view.accessibilityTraits = .adjustable
+        view.accessibilityLabel = L10n.bookPage
+        view.accessibilityHint = L10n.pageTurnA11yHint
         if #available(iOS 27.1, *) {
             // Folding or unfolding iPhone Duo moves the division region; lay the book out again when it does.
             let hinge = UIHingeInteraction { [weak coordinator = context.coordinator] _, _ in
@@ -57,6 +65,11 @@ struct PageCurlView: UIViewRepresentable {
         context.coordinator.regularWidth = hSize == .regular
         context.coordinator.displayScale = displayScale
         context.coordinator.pushEnvironment()
+        if let v = view as? CurlMTKView {
+            v.rightToLeft = controller.rightToLeft
+            v.accessibilityValue = "\(controller.page + 1) / \(controller.pageCount)"
+            v.takeKeyboardFocusIfFree()
+        }
     }
 
     static func dismantleUIView(_ view: MTKView, coordinator: Coordinator) {
@@ -166,9 +179,67 @@ struct PageCurlView: UIViewRepresentable {
 }
 
 /// MTKView that reports layout changes so the book can be re-fitted when the window resizes or folds.
+/// It also takes arrow keys / space from a hardware keyboard and VoiceOver's adjust gesture.
 final class CurlMTKView: MTKView {
+    /// +1 turns forward in reading order, -1 back.
+    var onStep: ((Int) -> Void)?
+    var onActivate: (() -> Void)?
+    /// In a right-to-left book the left arrow key moves forward.
+    var rightToLeft = false
+
     override func layoutSubviews() {
         super.layoutSubviews()
         setNeedsDisplay()
+    }
+
+    // MARK: Keyboard
+
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        takeKeyboardFocusIfFree()
+    }
+
+    /// Becomes first responder unless a sheet is up (its text field must keep the keyboard).
+    func takeKeyboardFocusIfFree() {
+        guard window != nil, !isFirstResponder else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window, !self.isFirstResponder,
+                  window.rootViewController?.presentedViewController == nil else { return }
+            self.becomeFirstResponder()
+        }
+    }
+
+    override var keyCommands: [UIKeyCommand]? {
+        let left = UIKeyCommand(title: rightToLeft ? L10n.nextPage : L10n.previousPage, action: #selector(keyLeft),
+                                input: UIKeyCommand.inputLeftArrow)
+        let right = UIKeyCommand(title: rightToLeft ? L10n.previousPage : L10n.nextPage, action: #selector(keyRight),
+                                 input: UIKeyCommand.inputRightArrow)
+        let commands = [
+            left, right,
+            UIKeyCommand(action: #selector(keyForward), input: " "),
+            UIKeyCommand(action: #selector(keyBackward), input: " ", modifierFlags: .shift),
+            UIKeyCommand(action: #selector(keyForward), input: UIKeyCommand.inputPageDown),
+            UIKeyCommand(action: #selector(keyBackward), input: UIKeyCommand.inputPageUp),
+            UIKeyCommand(action: #selector(keyForward), input: UIKeyCommand.inputDownArrow),
+            UIKeyCommand(action: #selector(keyBackward), input: UIKeyCommand.inputUpArrow),
+        ]
+        for c in commands { c.wantsPriorityOverSystemBehavior = true }
+        return commands
+    }
+
+    @objc private func keyLeft() { onStep?(rightToLeft ? 1 : -1) }
+    @objc private func keyRight() { onStep?(rightToLeft ? -1 : 1) }
+    @objc private func keyForward() { onStep?(1) }
+    @objc private func keyBackward() { onStep?(-1) }
+
+    // MARK: VoiceOver
+
+    override func accessibilityIncrement() { onStep?(1) }
+    override func accessibilityDecrement() { onStep?(-1) }
+    override func accessibilityActivate() -> Bool {
+        onActivate?()
+        return true
     }
 }
