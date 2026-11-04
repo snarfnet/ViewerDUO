@@ -120,6 +120,10 @@ struct SettingsView: View {
                             Text(L10n.curlSoftness)
                             Slider(value: $settings.curlSoftness, in: 0...1).tint(desk.accent)
                         }
+                        HStack {
+                            Text(L10n.speechRate)
+                            Slider(value: $settings.speechRate, in: 0.3...0.65).tint(desk.accent)
+                        }
                         Toggle(L10n.haptics, isOn: $settings.haptics)
                         Toggle(L10n.keepAwake, isOn: $settings.keepAwake)
                     }

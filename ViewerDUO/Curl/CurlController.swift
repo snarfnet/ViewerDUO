@@ -59,6 +59,11 @@ final class CurlController: ObservableObject {
         }
     }
 
+    deinit {
+        // The display link retains its target, not the controller; without this it kept firing after the reader closed.
+        link?.invalidate()
+    }
+
     var currentOffset: Int { source?.offset(forPage: page) ?? page }
 
     // MARK: - Loading
@@ -208,6 +213,7 @@ final class CurlController: ObservableObject {
             let st = style
             let token = loadToken
             isLoading = true
+            store?.suspend()
             renderQueue.async { [weak self] in
                 let offset = pending ?? source.offset(forPage: currentPage)
                 source.prepare(pageSize: size, style: st)
@@ -579,4 +585,35 @@ final class CurlController: ObservableObject {
     }
 
     var supportsSearch: Bool { source?.supportsSearch ?? false }
+
+    // MARK: - Reading aloud
+
+    var supportsSpeech: Bool { source?.supportsSpeech ?? false }
+
+    /// Pages on screen right now, in reading order.
+    var visiblePages: ClosedRange<Int> {
+        let last = max(0, pageCount - 1)
+        guard engine.layout.spread else { return min(page, last)...min(page, last) }
+        let s = engine.slots
+        let lo = min(max(0, s.first), last)
+        let hi = max(lo, min(last, s.second))
+        return lo...hi
+    }
+
+    /// Text of up to `count` pages from `page`, fetched on the render queue (the page table lives there).
+    func pageTexts(from page: Int, count: Int, completion: @escaping ([(page: Int, text: String)]) -> Void) {
+        guard let source, source.supportsSpeech else { completion([]); return }
+        renderQueue.async {
+            var out: [(page: Int, text: String)] = []
+            var p = max(0, page)
+            let total = source.pageCount
+            while p < total, out.count < count {
+                out.append((p, source.text(forPage: p) ?? ""))
+                p += 1
+            }
+            DispatchQueue.main.async { completion(out) }
+        }
+    }
+
+    var sourceIsReflowable: Bool { source?.isReflowable ?? false }
 }

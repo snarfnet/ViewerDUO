@@ -6,6 +6,23 @@ enum ArchiveError: Error {
     case cannotOpen
 }
 
+/// The cover queue and the reader can ask for the same book at once (for example after iOS purged the
+/// cache). Without this they both deleted and refilled the same folder and one of them saw half a book.
+enum ExtractionLock {
+    private static let guardLock = NSLock()
+    private static var locks: [UUID: NSLock] = [:]
+
+    static func run(_ id: UUID, _ body: () throws -> Void) rethrows {
+        guardLock.lock()
+        let l = locks[id] ?? NSLock()
+        locks[id] = l
+        guardLock.unlock()
+        l.lock()
+        defer { l.unlock() }
+        try body()
+    }
+}
+
 /// Extracts ZIP/CBZ/RAR/CBR image archives into the cache and returns image page URLs in natural order.
 enum ArchiveExtractor {
     static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "tif", "tiff", "avif"]
@@ -13,7 +30,8 @@ enum ArchiveExtractor {
     static func imagePages(fileURL: URL, format: BookFormat, bookID: UUID) throws -> [URL] {
         let dir = Library.cacheDir(for: bookID)
         let marker = dir.appendingPathComponent(".extracted")
-        if !FileManager.default.fileExists(atPath: marker.path) {
+        try ExtractionLock.run(bookID) {
+            guard !FileManager.default.fileExists(atPath: marker.path) else { return }
             try? FileManager.default.removeItem(at: dir)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             switch format {
@@ -44,7 +62,8 @@ enum ArchiveExtractor {
             guard imageExtensions.contains(ext) else { continue }
             let out = dir.appendingPathComponent(rel)
             try FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if let d = try? zip.extract(e) { try d.write(to: out) }
+            // One page at a time: without the pool a large archive kept every extracted page in memory until the loop ended.
+            try autoreleasepool { if let d = try? zip.extract(e) { try d.write(to: out) } }
         }
     }
 
@@ -58,7 +77,7 @@ enum ArchiveExtractor {
             guard imageExtensions.contains(ext) else { continue }
             let out = dir.appendingPathComponent(rel)
             try FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if let d = try? archive.extract(e) { try d.write(to: out) }
+            try autoreleasepool { if let d = try? archive.extract(e) { try d.write(to: out) } }
         }
     }
 

@@ -41,6 +41,8 @@ final class DuoSettings: ObservableObject {
     /// "curl" turns paper; "slide" shows two pages side by side and swipes both at once.
     @Published var turnStyle: String { didSet { d.set(turnStyle, forKey: "turnStyle") } }
     @Published var sortOrder: String { didSet { d.set(sortOrder, forKey: "sortOrder") } }
+    /// Read-aloud speed (AVSpeechUtterance rate, 0.5 = normal).
+    @Published var speechRate: Double { didSet { d.set(speechRate, forKey: "speechRate") } }
 
     init() {
         deskID = d.string(forKey: "deskID") ?? "walnut"
@@ -63,6 +65,7 @@ final class DuoSettings: ObservableObject {
         curlSoftness = d.object(forKey: "curlSoftness") == nil ? 0.5 : d.double(forKey: "curlSoftness")
         sortOrder = d.string(forKey: "sortOrder") ?? "recent"
         turnStyle = d.string(forKey: "turnStyle") ?? "curl"
+        speechRate = d.object(forKey: "speechRate") == nil ? 0.5 : d.double(forKey: "speechRate")
         if ScreenshotMode.isActive {
             deskID = "walnut"
             paperID = "cream"

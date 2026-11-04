@@ -22,6 +22,10 @@ protocol PageSource: AnyObject {
     /// Page containing character `offset` (reflowable only; `offset` is treated as a page index otherwise).
     func page(forOffset offset: Int) -> Int
     func search(_ query: String) -> [SearchHit]
+    /// Whether `text(forPage:)` can return words to read aloud.
+    var supportsSpeech: Bool { get }
+    /// The words printed on `page`, for reading aloud. Nil when the page has no text layer.
+    func text(forPage page: Int) -> String?
 }
 
 extension PageSource {
@@ -30,6 +34,8 @@ extension PageSource {
     func prepare(pageSize: CGSize, style: TextStyle) {}
     func search(_ query: String) -> [SearchHit] { [] }
     var supportsSearch: Bool { false }
+    var supportsSpeech: Bool { false }
+    func text(forPage page: Int) -> String? { nil }
 }
 
 enum PageRasterizer {
@@ -64,6 +70,7 @@ final class PDFSource: PageSource {
     let aspect: CGFloat
     var isReflowable: Bool { false }
     var supportsSearch: Bool { true }
+    var supportsSpeech: Bool { true }
 
     init?(url: URL) {
         guard let d = PDFDocument(url: url), d.pageCount > 0 else { return nil }
@@ -88,7 +95,9 @@ final class PDFSource: PageSource {
             for i in 0..<n.numberOfChildren {
                 guard let c = n.child(at: i) else { continue }
                 if let pg = c.destination?.page, let label = c.label, !label.isEmpty {
-                    out.append(Chapter(title: label, page: doc.index(for: pg), depth: depth))
+                    // index(for:) answers NSNotFound for a page outside this document; "page + 1" on that would trap.
+                    let idx = doc.index(for: pg)
+                    if idx >= 0, idx < doc.pageCount { out.append(Chapter(title: label, page: idx, depth: depth)) }
                 }
                 if depth < 2 { walk(c, depth: depth + 1) }
             }
@@ -113,6 +122,7 @@ final class PDFSource: PageSource {
         for s in sels.prefix(400) {
             guard let pg = s.pages.first else { continue }
             let idx = doc.index(for: pg)
+            guard idx >= 0, idx < pageCount else { continue }
             if seen[idx, default: 0] >= 3 { continue }
             seen[idx, default: 0] += 1
             let ext = s.copy() as? PDFSelection
@@ -122,6 +132,11 @@ final class PDFSource: PageSource {
             hits.append(SearchHit(page: idx, snippet: snippet.trimmingCharacters(in: .whitespaces)))
         }
         return hits
+    }
+
+    func text(forPage page: Int) -> String? {
+        guard page >= 0, page < pageCount else { return nil }
+        return doc.page(at: page)?.string
     }
 }
 

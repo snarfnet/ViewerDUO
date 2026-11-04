@@ -21,10 +21,22 @@ final class Library: ObservableObject {
         return d
     }()
 
+    /// Covers used to live in Caches; iOS purges that, and rebuilding them meant unpacking every comic again.
+    /// They now sit in Application Support (excluded from backup) and the old folder is moved over once.
     nonisolated static let coversDir: URL = {
-        let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let fm = FileManager.default
+        var d = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Covers", isDirectory: true)
-        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        if !fm.fileExists(atPath: d.path) {
+            try? fm.createDirectory(at: d.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let old = fm.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Covers", isDirectory: true)
+            if (try? fm.moveItem(at: old, to: d)) == nil {
+                try? fm.createDirectory(at: d, withIntermediateDirectories: true)
+            }
+        }
+        var rv = URLResourceValues()
+        rv.isExcludedFromBackup = true
+        try? d.setResourceValues(rv)
         return d
     }()
 
@@ -52,9 +64,26 @@ final class Library: ObservableObject {
     }
 
     func load() {
-        guard let data = try? Data(contentsOf: indexURL),
-              let list = try? JSONDecoder().decode([Book].self, from: data) else { return }
-        books = list
+        guard let data = try? Data(contentsOf: indexURL) else { return }
+        // Decode book by book: one unreadable entry must not empty the whole shelf, because the next save
+        // would then overwrite library.json and every bookmark and reading position would be gone.
+        if let list = try? JSONDecoder().decode([LossyBook].self, from: data) {
+            books = list.compactMap(\.book)
+            if books.count < list.count { backUpIndex(data) }
+        } else {
+            backUpIndex(data)
+        }
+    }
+
+    /// Keeps a copy of an index that could not be read in full, so nothing is lost for good.
+    private func backUpIndex(_ data: Data) {
+        let name = "library-backup-\(Int(Date().timeIntervalSince1970)).json"
+        try? data.write(to: Self.booksDir.appendingPathComponent(name), options: .atomic)
+    }
+
+    private struct LossyBook: Decodable {
+        let book: Book?
+        init(from decoder: Decoder) throws { book = try? Book(from: decoder) }
     }
 
     private func save() {
@@ -79,6 +108,10 @@ final class Library: ObservableObject {
 
     /// True while files are being copied in; the library shows a progress card.
     @Published private(set) var importing = false
+    /// Imports can overlap (picker plus "Open in"); the card stays up until the last one ends.
+    private var activeImports = 0 { didSet { importing = activeImports > 0 } }
+    /// Set when a file handed over from another app could not be imported, so the library can say so.
+    @Published var externalImportFailed = false
     /// A book the app was asked to open from outside (share sheet / Files "Open in").
     @Published var pendingOpen: Book?
 
@@ -86,8 +119,8 @@ final class Library: ObservableObject {
     @discardableResult
     func importFiles(_ urls: [URL]) async -> (books: [Book], failed: Int) {
         guard !urls.isEmpty else { return ([], 0) }
-        importing = true
-        defer { importing = false }
+        activeImports += 1
+        defer { activeImports -= 1 }
         let result = await Task.detached(priority: .userInitiated) { () -> ([Book], Int) in
             var made: [Book] = []
             var failed = 0
@@ -120,7 +153,7 @@ final class Library: ObservableObject {
     @discardableResult
     func importAndOpen(_ url: URL) async -> Bool {
         let r = await importFiles([url])
-        if let b = r.books.first { pendingOpen = b }
+        if let b = r.books.first { pendingOpen = b } else { externalImportFailed = true }
         return r.failed == 0
     }
 
@@ -260,11 +293,18 @@ final class Library: ObservableObject {
         save()
     }
 
-    func update(_ book: Book, page: Int, offset: Int, pageCount: Int? = nil) {
+    func update(_ book: Book, page: Int, offset: Int, pageCount: Int? = nil, readingSeconds: Double = 0) {
         guard let i = books.firstIndex(where: { $0.id == book.id }) else { return }
+        if readingSeconds > 0 { books[i].readingSeconds += readingSeconds }
         books[i].lastPage = page
         books[i].lastOffset = offset
         if let pc = pageCount, pc > 0 { books[i].pageCount = pc }
+        save()
+    }
+
+    func addReadingTime(_ book: Book, seconds: Double) {
+        guard seconds > 0, let i = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[i].readingSeconds += seconds
         save()
     }
 
@@ -387,7 +427,9 @@ final class CoverStore {
         lock.lock()
         if let m = memory[id] { lock.unlock(); return m }
         lock.unlock()
-        guard let img = UIImage(contentsOfFile: Library.coverURL(for: id).path) else { return nil }
+        // Decode once here; a lazily decoded JPEG was decoded again on the main thread every time a card redrew.
+        guard let file = UIImage(contentsOfFile: Library.coverURL(for: id).path) else { return nil }
+        let img = file.preparingForDisplay() ?? file
         lock.lock()
         memory[id] = img
         lock.unlock()

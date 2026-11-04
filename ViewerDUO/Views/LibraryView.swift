@@ -106,6 +106,11 @@ struct LibraryView: View {
                 importFailed = r.failed > 0
             }
         }
+        .onChange(of: library.externalImportFailed) { _, failed in
+            guard failed else { return }
+            library.externalImportFailed = false
+            importFailed = true
+        }
         .onChange(of: library.pendingOpen) { _, b in
             guard let b else { return }
             library.pendingOpen = nil
@@ -162,10 +167,12 @@ struct LibraryView: View {
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(.ultraThinMaterial))
                 }
+                .accessibilityLabel(L10n.sort)
                 ChromeButton(desk: desk, systemName: "gearshape", size: 38) {
                     settings.tap()
                     showSettings = true
                 }
+                .accessibilityLabel(L10n.settings)
             }
             if library.books.count > 6 {
                 HStack {
@@ -315,6 +322,9 @@ struct BookCard: View {
                     }
                 }
                 .frame(height: 3)
+            }
+            if let time = L10n.readingTime(book.readingSeconds) {
+                Text(time).font(DuoFont.caption(10)).foregroundStyle(desk.ink.opacity(0.55)).lineLimit(1)
             }
         }
     }

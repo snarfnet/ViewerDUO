@@ -86,6 +86,19 @@ enum L10n {
     static var supportedFormats: String { t("対応形式", "Formats") }
     static var privacyNote: String { t("本はすべて端末内に保存され、外部へ送信されません。", "Every book stays on your device. Nothing is uploaded.") }
     static var sample: String { t("サンプル", "Sample") }
+    static var autoRead: String { t("自動で読む", "Hands-free reading") }
+    static var readAloud: String { t("読み上げ（ページも自動でめくる）", "Read aloud (turns the pages too)") }
+    static var autoTurn: String { t("自動でめくる", "Turn pages automatically") }
+    static var everyNSeconds: String { t("%d秒ごと", "Every %d seconds") }
+    static var stopAuto: String { t("自動読書を止める", "Stop hands-free reading") }
+    static var speechRate: String { t("読み上げの速さ", "Reading speed") }
+    static var nothingToRead: String { t("読み上げられる文字がありません", "There is no text to read aloud") }
+    static var readingAloudHint: String { t("読み上げ中・中央タップで止めるボタン", "Reading aloud · tap the center for the stop button") }
+    static var autoTurnHint: String { t("自動でめくっています・中央タップで止めるボタン", "Turning automatically · tap the center for the stop button") }
+    static var nextPage: String { t("次のページ", "Next page") }
+    static var previousPage: String { t("前のページ", "Previous page") }
+    static var bookPage: String { t("本のページ", "Book page") }
+    static var pageTurnA11yHint: String { t("上下にスワイプでページをめくる。ダブルタップで操作パネル。", "Swipe up or down to turn pages. Double-tap for controls.") }
     static var aboutBody: String {
         t("""
         Viewer DUOは、紙の本をめくる感触をそのまま画面に持ち込んだ書籍ビューアです。
@@ -106,5 +119,14 @@ enum L10n {
 
         Every book stays on your device. Nothing is uploaded.
         """)
+    }
+
+    /// "読書 1時間5分" / "Read 1h 5m"; nil under a minute.
+    static func readingTime(_ seconds: Double) -> String? {
+        let minutes = Int(seconds / 60)
+        guard minutes >= 1 else { return nil }
+        let h = minutes / 60, m = minutes % 60
+        if h > 0 { return t("読書 \(h)時間\(m)分", "Read \(h)h \(m)m") }
+        return t("読書 \(m)分", "Read \(m)m")
     }
 }
