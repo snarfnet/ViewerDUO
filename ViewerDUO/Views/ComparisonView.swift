@@ -48,6 +48,12 @@ struct ComparisonView: View {
                 }
             }
         }
+        .onAppear {
+            if ScreenshotMode.target == "comparison", library.books.count >= 2 {
+                first = library.books[0]
+                second = library.books[1]
+            }
+        }
     }
 
     private func pane(_ book: Book) -> some View {

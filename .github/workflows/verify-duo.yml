@@ -9,6 +9,26 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - run: swiftc ViewerDUO/Models/Book.swift Tests/main.swift -o /tmp/viewerduo-model-test && /tmp/viewerduo-model-test
       - run: brew install xcodegen
       - run: xcodegen generate
-      - run: xcodebuild build -project ViewerDUO.xcodeproj -scheme ViewerDUO -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+      - run: xcodebuild build -project ViewerDUO.xcodeproj -scheme ViewerDUO -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG
+      - name: Capture comparison
+        run: |
+          set -euo pipefail
+          mkdir -p shots
+          for kind in iphone ipad; do
+            DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; kind=sys.argv[1]; devices=[d for ds in json.load(sys.stdin)["devices"].values() for d in ds if d.get("isAvailable")]; matches=[d for d in devices if (d["name"].startswith("iPhone") if kind=="iphone" else d["name"].startswith("iPad Pro 13"))]; print(matches[-1]["udid"])' "$kind")
+            xcrun simctl boot "$DEVICE" || true
+            xcrun simctl bootstatus "$DEVICE" -b
+            xcrun simctl install "$DEVICE" build/Build/Products/Debug-iphonesimulator/ViewerDUO.app
+            xcrun simctl launch "$DEVICE" com.tokyonasu.ViewerDUO -AppleLanguages '(ja)' -AppleLocale ja_JP -screenshot comparison
+            sleep 25
+            xcrun simctl io "$DEVICE" screenshot "shots/$kind.png"
+            xcrun simctl shutdown "$DEVICE"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: comparison-screenshots
+          path: shots

@@ -27,6 +27,7 @@ struct ReaderView: View {
     private var rtl: Bool { liveBook.rightToLeft ?? settings.rightToLeft }
     private var vertical: Bool { liveBook.verticalText ?? settings.verticalText }
     private var slide: Bool { (liveBook.turnStyle ?? settings.turnStyle) == "slide" }
+    private var layout: LayoutMode { liveBook.layoutOverride.flatMap(LayoutMode.init(rawValue:)) ?? settings.layoutMode }
 
     private var textStyle: TextStyle {
         var s = settings.textStyle
@@ -133,6 +134,7 @@ struct ReaderView: View {
         .onChange(of: settings.curlSoftness) { _, _ in pushSettings() }
         .onChange(of: settings.turnStyle) { _, _ in pushSettings() }
         .onChange(of: liveBook.turnStyle) { _, _ in pushSettings() }
+        .onChange(of: liveBook.layoutOverride) { _, _ in pushSettings() }
         .onChange(of: settings.keepAwake) { _, v in UIApplication.shared.isIdleTimerDisabled = v }
         .onChange(of: liveBook.rightToLeft) { _, _ in pushSettings() }
         .onChange(of: liveBook.verticalText) { _, _ in pushSettings() }
@@ -188,7 +190,7 @@ struct ReaderView: View {
     }
 
     private func pushSettings() {
-        controller.applySettings(layoutMode: settings.layoutMode, rightToLeft: rtl, style: textStyle,
+        controller.applySettings(layoutMode: layout, rightToLeft: rtl, style: textStyle,
                                  coverAlone: settings.coverAlone, showStack: settings.pageStack, softness: CGFloat(settings.curlSoftness),
                                  slide: slide)
     }
@@ -362,14 +364,14 @@ struct ReaderView: View {
                         if turningOn { flashHint() }
                     }
                     .accessibilityLabel(L10n.turnSlide)
-                    ChromeButton(desk: desk, systemName: settings.layoutMode.symbol, size: 36, active: settings.layoutMode != .auto, disabled: slide) {
+                    ChromeButton(desk: desk, systemName: layout.symbol, size: 36, active: layout != .auto, disabled: slide) {
                         settings.tap()
                         let all = LayoutMode.allCases
-                        let i = all.firstIndex(of: settings.layoutMode) ?? 0
-                        settings.layoutMode = all[(i + 1) % all.count]
+                        let i = all.firstIndex(of: layout) ?? 0
+                        library.setLayoutOverride(liveBook, all[(i + 1) % all.count])
                     }
                     .accessibilityLabel(L10n.layout)
-                    .accessibilityValue(settings.layoutMode.name)
+                    .accessibilityValue(layout.name)
                     ChromeButton(desk: desk, systemName: "textformat.size", size: 36) { settings.tap(); showSettings = true }
                         .accessibilityLabel(L10n.settings)
                 }

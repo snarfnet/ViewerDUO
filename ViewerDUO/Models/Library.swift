@@ -100,6 +100,12 @@ final class Library: ObservableObject {
         save()
     }
 
+    func setLayoutOverride(_ book: Book, _ layout: LayoutMode) {
+        guard let index = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[index].layoutOverride = layout.rawValue
+        save()
+    }
+
     func sorted(by order: String) -> [Book] {
         switch order {
         case "title": return books.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }

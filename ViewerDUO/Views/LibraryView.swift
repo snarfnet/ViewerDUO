@@ -142,6 +142,9 @@ struct LibraryView: View {
             Text(L10n.deleteMessage)
         }
         .onAppear {
+            if ScreenshotMode.target == "comparison" {
+                showComparison = true
+            }
             if ScreenshotMode.target == "reader", let first = library.sorted(by: "added").last {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openBook = first }
             }
