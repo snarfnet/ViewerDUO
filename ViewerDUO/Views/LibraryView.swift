@@ -43,6 +43,15 @@ struct LibraryView: View {
                             if let recent = library.mostRecent, query.isEmpty, !favoritesOnly, settings.sortOrder == "recent" {
                                 continueCard(recent, desk: desk)
                             }
+                            if books.isEmpty {
+                                Text(favoritesOnly && query.isEmpty
+                                     ? L10n.t("本を長押ししてお気に入りに追加できます", "Touch and hold a book to add it to favorites")
+                                     : L10n.t("該当する本がありません", "No matching books"))
+                                    .font(DuoFont.body(14))
+                                    .foregroundStyle(desk.ink.opacity(0.7))
+                                    .multilineTextAlignment(.center)
+                                    .padding(24)
+                            }
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 170), spacing: 16)], spacing: 22) {
                                 ForEach(books) { book in
                                     BookCard(book: book, desk: desk, coverVersion: library.coverVersion)
