@@ -5,14 +5,15 @@ on:
     branches: ['improve/**']
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - run: sudo xcode-select -s /Applications/Xcode_27.1.app
       - run: swiftc ViewerDUO/Models/Book.swift Tests/main.swift -o /tmp/viewerduo-model-test && /tmp/viewerduo-model-test
       - run: brew install xcodegen
       - run: xcodegen generate
-      - run: xcodebuild build -project ViewerDUO.xcodeproj -scheme ViewerDUO -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG
+      - run: xcodebuild build -project ViewerDUO.xcodeproj -scheme ViewerDUO -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO
       - name: Capture comparison
         run: |
           set -euo pipefail

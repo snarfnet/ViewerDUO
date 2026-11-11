@@ -40,6 +40,7 @@ struct Bookmark: Codable, Identifiable, Hashable {
     var offset: Int
     var label: String
     var createdAt: Date
+    var note: String? = nil
 }
 
 struct Book: Identifiable, Codable, Equatable, Hashable {

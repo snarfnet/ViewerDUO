@@ -426,6 +426,7 @@ struct ContentsSheet: View {
     let isReflowable: Bool
     let onSelect: (Int, Int?) -> Void
     @State private var tab = 0
+    @State private var editingBookmark: Bookmark?
 
     private var liveBook: Book { library.book(withID: book.id) ?? book }
 
@@ -466,11 +467,15 @@ struct ContentsSheet: View {
                     } else {
                         List {
                             ForEach(liveBook.bookmarks) { bm in
-                                Button { onSelect(bm.page, isReflowable ? bm.offset : nil) } label: {
-                                    HStack {
+                                HStack {
+                                    Button { onSelect(bm.page, isReflowable ? bm.offset : nil) } label: {
+                                      HStack {
                                         Image(systemName: "bookmark.fill").foregroundStyle(desk.accent)
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(bm.label).lineLimit(1)
+                                            if let note = bm.note, !note.isEmpty {
+                                                Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                            }
                                             Text(bm.createdAt.formatted(date: .abbreviated, time: .shortened))
                                                 .font(.caption).foregroundStyle(.secondary)
                                         }
@@ -478,8 +483,12 @@ struct ContentsSheet: View {
                                         if !isReflowable {
                                             Text("\(bm.page + 1)").foregroundStyle(.secondary).monospacedDigit()
                                         }
-                                    }
-                                    .foregroundStyle(Color.primary)
+                                      }
+                                      .foregroundStyle(Color.primary)
+                                    }.buttonStyle(.borderless)
+                                    Button { editingBookmark = bm } label: { Image(systemName: "square.and.pencil") }
+                                        .buttonStyle(.borderless)
+                                        .accessibilityLabel(L10n.t("しおりのメモを編集", "Edit bookmark note"))
                                 }
                             }
                             .onDelete { idx in
@@ -499,6 +508,11 @@ struct ContentsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(L10n.done) { dismiss() } }
             }
+            .sheet(item: $editingBookmark) { bookmark in
+                BookmarkNoteSheet(bookmark: bookmark) { note in
+                    library.setBookmarkNote(book, id: bookmark.id, note: note)
+                }
+            }
         }
         .tint(desk.accent)
     }
@@ -511,6 +525,32 @@ struct ContentsSheet: View {
             Text(text).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct BookmarkNoteSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let bookmark: Bookmark
+    let onSave: (String) -> Void
+    @State private var note = ""
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $note)
+                .padding()
+                .navigationTitle(L10n.t("しおりのメモ", "Bookmark note"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button(L10n.cancel) { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(L10n.done) { onSave(note); dismiss() }
+                    }
+                }
+                .onAppear { note = bookmark.note ?? "" }
+                .onChange(of: note) { _, newValue in
+                    if newValue.count > 2000 { note = String(newValue.prefix(2000)) }
+                }
+        }
     }
 }
 

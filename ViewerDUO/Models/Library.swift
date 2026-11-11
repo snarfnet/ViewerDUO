@@ -356,6 +356,13 @@ final class Library: ObservableObject {
         save()
     }
 
+    func setBookmarkNote(_ book: Book, id: UUID, note: String) {
+        guard let i = books.firstIndex(where: { $0.id == book.id }),
+              let j = books[i].bookmarks.firstIndex(where: { $0.id == id }) else { return }
+        books[i].bookmarks[j].note = String(note.prefix(2000))
+        save()
+    }
+
     func book(withID id: UUID) -> Book? { books.first { $0.id == id } }
 
     // MARK: - Sample / demo
