@@ -40,7 +40,7 @@ extension PageSource {
 
 enum PageRasterizer {
     /// Draws `image` fitted inside a page of `size` on top of the paper colour.
-    static func fitted(image: CGImage?, size: CGSize, scale: CGFloat, paper: UIColor) -> CGImage? {
+    static func fitted(image: CGImage?, size: CGSize, scale: CGFloat, paper: UIColor, trimMargins: Bool = false) -> CGImage? {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = true
@@ -48,7 +48,11 @@ enum PageRasterizer {
         let out = renderer.image { ctx in
             paper.setFill()
             ctx.fill(CGRect(origin: .zero, size: size))
-            guard let image else { return }
+            guard let original = image else { return }
+            let insetX = CGFloat(original.width) * 0.05
+            let insetY = CGFloat(original.height) * 0.05
+            let crop = CGRect(x: insetX, y: insetY, width: CGFloat(original.width) - 2 * insetX, height: CGFloat(original.height) - 2 * insetY).integral
+            let image = trimMargins ? (original.cropping(to: crop) ?? original) : original
             let iw = CGFloat(image.width), ih = CGFloat(image.height)
             guard iw > 0, ih > 0 else { return }
             let s = min(size.width / iw, size.height / ih)
@@ -112,7 +116,7 @@ final class PDFSource: PageSource {
         let thumb = p.thumbnail(of: px, for: .cropBox)
         // PDF pages are white by design; only the letterbox picks up the paper colour.
         let paper = style.paper.isDark ? UIColor(white: 0.16, alpha: 1) : style.paper.background
-        return PageRasterizer.fitted(image: thumb.cgImage, size: size, scale: scale, paper: paper)
+        return PageRasterizer.fitted(image: thumb.cgImage, size: size, scale: scale, paper: paper, trimMargins: style.trimMargins)
     }
 
     func search(_ query: String) -> [SearchHit] {
@@ -168,6 +172,6 @@ final class ImageSource: PageSource {
         let maxPx = max(size.width, size.height) * scale
         let img = ImageLoader.downsampled(urls[page], maxPixel: maxPx)
         let paper = style.paper.isDark ? UIColor(white: 0.12, alpha: 1) : style.paper.background
-        return PageRasterizer.fitted(image: img?.cgImage, size: size, scale: scale, paper: paper)
+        return PageRasterizer.fitted(image: img?.cgImage, size: size, scale: scale, paper: paper, trimMargins: style.trimMargins)
     }
 }

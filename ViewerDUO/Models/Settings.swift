@@ -110,9 +110,10 @@ struct TextStyle: Equatable {
     var margin: CGFloat
     var vertical: Bool
     var title: String = ""
+    var trimMargins: Bool = false
 
     static func == (a: TextStyle, b: TextStyle) -> Bool {
         a.paper.id == b.paper.id && a.font == b.font && a.fontSize == b.fontSize && a.lineSpacing == b.lineSpacing
-            && a.margin == b.margin && a.vertical == b.vertical && a.title == b.title
+            && a.margin == b.margin && a.vertical == b.vertical && a.title == b.title && a.trimMargins == b.trimMargins
     }
 }

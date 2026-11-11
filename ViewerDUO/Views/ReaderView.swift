@@ -33,6 +33,7 @@ struct ReaderView: View {
         var s = settings.textStyle
         s.vertical = vertical
         s.title = liveBook.title
+        s.trimMargins = liveBook.trimMargins ?? false
         return s
     }
 
@@ -135,6 +136,7 @@ struct ReaderView: View {
         .onChange(of: settings.turnStyle) { _, _ in pushSettings() }
         .onChange(of: liveBook.turnStyle) { _, _ in pushSettings() }
         .onChange(of: liveBook.layoutOverride) { _, _ in pushSettings() }
+        .onChange(of: liveBook.trimMargins) { _, _ in pushSettings() }
         .onChange(of: settings.keepAwake) { _, v in UIApplication.shared.isIdleTimerDisabled = v }
         .onChange(of: liveBook.rightToLeft) { _, _ in pushSettings() }
         .onChange(of: liveBook.verticalText) { _, _ in pushSettings() }

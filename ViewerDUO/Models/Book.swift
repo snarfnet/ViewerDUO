@@ -66,6 +66,7 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
     var favorite: Bool? = nil
     /// Nil follows the global layout setting, preserving older libraries.
     var layoutOverride: String? = nil
+    var trimMargins: Bool? = nil
 
     init(id: UUID, title: String, author: String = "", fileName: String, format: BookFormat, addedAt: Date,
          lastOpened: Date? = nil, lastPage: Int = 0, lastOffset: Int = 0, pageCount: Int = 0,
@@ -89,7 +90,7 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, author, fileName, format, addedAt, lastOpened, lastPage, lastOffset, pageCount, bookmarks, rightToLeft, verticalText, turnStyle, hue, readingSeconds, favorite, layoutOverride
+        case id, title, author, fileName, format, addedAt, lastOpened, lastPage, lastOffset, pageCount, bookmarks, rightToLeft, verticalText, turnStyle, hue, readingSeconds, favorite, layoutOverride, trimMargins
     }
 
     init(from decoder: Decoder) throws {
@@ -113,6 +114,7 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
                   readingSeconds: try c.decodeIfPresent(Double.self, forKey: .readingSeconds) ?? 0)
         self.favorite = try c.decodeIfPresent(Bool.self, forKey: .favorite)
         self.layoutOverride = try c.decodeIfPresent(String.self, forKey: .layoutOverride)
+        self.trimMargins = try c.decodeIfPresent(Bool.self, forKey: .trimMargins)
     }
 
     var progress: Double {

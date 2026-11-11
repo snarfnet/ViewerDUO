@@ -100,9 +100,15 @@ final class Library: ObservableObject {
         save()
     }
 
-    func setLayoutOverride(_ book: Book, _ layout: LayoutMode) {
+    func setLayoutOverride(_ book: Book, _ layout: LayoutMode?) {
         guard let index = books.firstIndex(where: { $0.id == book.id }) else { return }
-        books[index].layoutOverride = layout.rawValue
+        books[index].layoutOverride = layout?.rawValue
+        save()
+    }
+
+    func setTrimMargins(_ book: Book, _ enabled: Bool) {
+        guard let index = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[index].trimMargins = enabled
         save()
     }
 

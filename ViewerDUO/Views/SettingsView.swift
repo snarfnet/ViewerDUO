@@ -77,6 +77,19 @@ struct SettingsView: View {
 
                 if let book {
                     Section(L10n.thisBook) {
+                        if book.format != .txt {
+                            Toggle(L10n.t("画像の周囲を５％切り取る", "Trim 5% from image edges"), isOn: Binding(
+                                get: { (currentBook ?? book).trimMargins ?? false },
+                                set: { library.setTrimMargins(book, $0) }))
+                        }
+                        Picker(L10n.layout, selection: Binding(
+                            get: { (currentBook ?? book).layoutOverride ?? "global" },
+                            set: { v in library.setLayoutOverride(book, LayoutMode(rawValue: v)) })) {
+                            Text(L10n.followGlobal).tag("global")
+                            ForEach(LayoutMode.allCases) { mode in
+                                Text(mode.name).tag(mode.rawValue)
+                            }
+                        }
                         Picker(L10n.rtl, selection: Binding(
                             get: { (currentBook ?? book).rightToLeft.map { $0 ? "on" : "off" } ?? "global" },
                             set: { v in library.setOverrides(book, rightToLeft: v == "global" ? nil : v == "on", verticalText: currentBook?.verticalText) })) {

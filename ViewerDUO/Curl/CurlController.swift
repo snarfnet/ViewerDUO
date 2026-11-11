@@ -193,7 +193,7 @@ final class CurlController: ObservableObject {
         let aspect = source?.aspect ?? 1.45
         let sp = effectiveSpread
         let layout = BookLayout.make(viewSize: viewSize, spread: sp, rtl: rightToLeft, aspect: aspect, hingeX: sp ? hingeX : nil, hingeGap: sp ? hingeGap : 0)
-        let key = "\(layout.pageSize)-\(sp)-\(rightToLeft)-\(style.fontSize)-\(style.font)-\(style.lineSpacing)-\(style.margin)-\(style.vertical)-\(style.paper.id)-\(displayScale)-\(coverAlone)-\(slideMode)"
+        let key = "\(layout.pageSize)-\(sp)-\(rightToLeft)-\(style.fontSize)-\(style.font)-\(style.lineSpacing)-\(style.margin)-\(style.vertical)-\(style.paper.id)-\(style.trimMargins)-\(displayScale)-\(coverAlone)-\(slideMode)"
         guard force || key != lastLayoutKey || layout != engine.layout else { return }
         lastLayoutKey = key
         engine.cancelTurn()
