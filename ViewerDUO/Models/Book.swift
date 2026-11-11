@@ -62,6 +62,8 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
     var hue: Double
     /// Time spent with the book open in the foreground, in seconds.
     var readingSeconds: Double
+    /// Optional so older library indexes decode without a migration.
+    var favorite: Bool? = nil
 
     init(id: UUID, title: String, author: String = "", fileName: String, format: BookFormat, addedAt: Date,
          lastOpened: Date? = nil, lastPage: Int = 0, lastOffset: Int = 0, pageCount: Int = 0,
@@ -85,7 +87,7 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, author, fileName, format, addedAt, lastOpened, lastPage, lastOffset, pageCount, bookmarks, rightToLeft, verticalText, turnStyle, hue, readingSeconds
+        case id, title, author, fileName, format, addedAt, lastOpened, lastPage, lastOffset, pageCount, bookmarks, rightToLeft, verticalText, turnStyle, hue, readingSeconds, favorite
     }
 
     init(from decoder: Decoder) throws {
@@ -107,6 +109,7 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
                   turnStyle: try c.decodeIfPresent(String.self, forKey: .turnStyle),
                   hue: try c.decodeIfPresent(Double.self, forKey: .hue),
                   readingSeconds: try c.decodeIfPresent(Double.self, forKey: .readingSeconds) ?? 0)
+        self.favorite = try c.decodeIfPresent(Bool.self, forKey: .favorite)
     }
 
     var progress: Double {

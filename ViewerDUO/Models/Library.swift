@@ -94,6 +94,12 @@ final class Library: ObservableObject {
 
     func fileURL(for book: Book) -> URL { Self.booksDir.appendingPathComponent(book.fileName) }
 
+    func toggleFavorite(_ book: Book) {
+        guard let index = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[index].favorite = !(books[index].favorite ?? false)
+        save()
+    }
+
     func sorted(by order: String) -> [Book] {
         switch order {
         case "title": return books.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }

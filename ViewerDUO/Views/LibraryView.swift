@@ -11,6 +11,7 @@ struct LibraryView: View {
     @State private var deleteTarget: Book?
     @State private var importFailed = false
     @State private var query = ""
+    @State private var favoritesOnly = false
 
     private var importTypes: [UTType] {
         var t: [UTType] = [.pdf, .epub, .plainText, .text, .zip, .archive, .image, .folder]
@@ -21,7 +22,7 @@ struct LibraryView: View {
     }
 
     private var books: [Book] {
-        let all = library.sorted(by: settings.sortOrder)
+        let all = library.sorted(by: settings.sortOrder).filter { !favoritesOnly || ($0.favorite ?? false) }
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return all }
         return all.filter { $0.title.localizedCaseInsensitiveContains(q) || $0.author.localizedCaseInsensitiveContains(q) }
@@ -38,7 +39,7 @@ struct LibraryView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 18) {
-                            if let recent = library.mostRecent, query.isEmpty, settings.sortOrder == "recent" {
+                            if let recent = library.mostRecent, query.isEmpty, !favoritesOnly, settings.sortOrder == "recent" {
                                 continueCard(recent, desk: desk)
                             }
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 170), spacing: 16)], spacing: 22) {
@@ -49,6 +50,9 @@ struct LibraryView: View {
                                             withAnimation(.easeInOut(duration: 0.3)) { openBook = book }
                                         }
                                         .contextMenu {
+                                            Button { library.toggleFavorite(book) } label: {
+                                                Label(book.favorite == true ? L10n.t("お気に入りを解除", "Remove favorite") : L10n.t("お気に入りに追加", "Add favorite"), systemImage: book.favorite == true ? "star.slash" : "star")
+                                            }
                                             Button { renameTarget = book } label: { Label(L10n.rename, systemImage: "pencil") }
                                             Button(role: .destructive) { deleteTarget = book } label: { Label(L10n.delete, systemImage: "trash") }
                                         }
@@ -154,6 +158,13 @@ struct LibraryView: View {
                         .foregroundStyle(desk.ink.opacity(0.6))
                 }
                 Spacer()
+                Button { favoritesOnly.toggle() } label: {
+                    Image(systemName: favoritesOnly ? "star.fill" : "star")
+                        .foregroundStyle(favoritesOnly ? desk.accent : desk.ink)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+                .accessibilityLabel(L10n.t("お気に入りのみ", "Favorites only"))
                 Menu {
                     Picker(L10n.sort, selection: $settings.sortOrder) {
                         Text(L10n.sortRecent).tag("recent")
