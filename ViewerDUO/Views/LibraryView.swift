@@ -12,6 +12,7 @@ struct LibraryView: View {
     @State private var importFailed = false
     @State private var query = ""
     @State private var favoritesOnly = false
+    @State private var showComparison = false
 
     private var importTypes: [UTType] {
         var t: [UTType] = [.pdf, .epub, .plainText, .text, .zip, .archive, .image, .folder]
@@ -90,6 +91,12 @@ struct LibraryView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(5)
             }
+            if showComparison {
+                ComparisonView { showComparison = false }
+                    .environmentObject(library)
+                    .environmentObject(settings)
+                    .zIndex(6)
+            }
         }
         .preferredColorScheme(desk.isDark ? .dark : .light)
         .sheet(isPresented: $showSettings) {
@@ -158,6 +165,14 @@ struct LibraryView: View {
                         .foregroundStyle(desk.ink.opacity(0.6))
                 }
                 Spacer()
+                Button { showComparison = true } label: {
+                    Image(systemName: "rectangle.split.2x1")
+                        .foregroundStyle(desk.ink)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+                .disabled(library.books.count < 2)
+                .accessibilityLabel(L10n.t("２冊を比較", "Compare two books"))
                 Button { favoritesOnly.toggle() } label: {
                     Image(systemName: favoritesOnly ? "star.fill" : "star")
                         .foregroundStyle(favoritesOnly ? desk.accent : desk.ink)
