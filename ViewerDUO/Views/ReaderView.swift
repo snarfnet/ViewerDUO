@@ -134,12 +134,8 @@ struct ReaderView: View {
         .onChange(of: settings.pageStack) { _, _ in pushSettings() }
         .onChange(of: settings.curlSoftness) { _, _ in pushSettings() }
         .onChange(of: settings.turnStyle) { _, _ in pushSettings() }
-        .onChange(of: liveBook.turnStyle) { _, _ in pushSettings() }
-        .onChange(of: liveBook.layoutOverride) { _, _ in pushSettings() }
-        .onChange(of: liveBook.trimMargins) { _, _ in pushSettings() }
+        .onChange(of: liveBook) { _, _ in pushSettings() }
         .onChange(of: settings.keepAwake) { _, v in UIApplication.shared.isIdleTimerDisabled = v }
-        .onChange(of: liveBook.rightToLeft) { _, _ in pushSettings() }
-        .onChange(of: liveBook.verticalText) { _, _ in pushSettings() }
         .sheet(isPresented: $showSettings) {
             SettingsView(book: liveBook)
                 .environmentObject(settings)
