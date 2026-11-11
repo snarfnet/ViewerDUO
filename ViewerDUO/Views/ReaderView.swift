@@ -9,6 +9,7 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     let book: Book
+    var comparisonMode = false
     let onClose: () -> Void
     @State private var chromeVisible = true
     @State private var showSettings = false
@@ -43,8 +44,8 @@ struct ReaderView: View {
             DeskBackground(desk: desk)
             PageCurlView(controller: controller)
                 .padding(.horizontal, 4)
-                .padding(.top, 6)
-                .padding(.bottom, 6)
+                .padding(.top, comparisonMode && chromeVisible ? 64 : 6)
+                .padding(.bottom, comparisonMode && chromeVisible ? 108 : 6)
             if settings.warmth > 0.01 {
                 Color(red: 1.0, green: 0.62, blue: 0.25)
                     .opacity(settings.warmth * 0.28)

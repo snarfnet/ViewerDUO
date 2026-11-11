@@ -57,7 +57,7 @@ struct ComparisonView: View {
     }
 
     private func pane(_ book: Book) -> some View {
-        ReaderView(book: book, onClose: onClose)
+        ReaderView(book: book, comparisonMode: true, onClose: onClose)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
     }
