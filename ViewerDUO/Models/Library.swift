@@ -94,6 +94,24 @@ final class Library: ObservableObject {
 
     func fileURL(for book: Book) -> URL { Self.booksDir.appendingPathComponent(book.fileName) }
 
+    func toggleFavorite(_ book: Book) {
+        guard let index = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[index].favorite = !(books[index].favorite ?? false)
+        save()
+    }
+
+    func setLayoutOverride(_ book: Book, _ layout: LayoutMode?) {
+        guard let index = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[index].layoutOverride = layout?.rawValue
+        save()
+    }
+
+    func setTrimMargins(_ book: Book, _ enabled: Bool) {
+        guard let index = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[index].trimMargins = enabled
+        save()
+    }
+
     func sorted(by order: String) -> [Book] {
         switch order {
         case "title": return books.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
@@ -335,6 +353,13 @@ final class Library: ObservableObject {
     func removeBookmark(_ book: Book, id: UUID) {
         guard let i = books.firstIndex(where: { $0.id == book.id }) else { return }
         books[i].bookmarks.removeAll { $0.id == id }
+        save()
+    }
+
+    func setBookmarkNote(_ book: Book, id: UUID, note: String) {
+        guard let i = books.firstIndex(where: { $0.id == book.id }),
+              let j = books[i].bookmarks.firstIndex(where: { $0.id == id }) else { return }
+        books[i].bookmarks[j].note = String(note.prefix(2000))
         save()
     }
 

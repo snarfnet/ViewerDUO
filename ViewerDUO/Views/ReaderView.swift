@@ -9,6 +9,7 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     let book: Book
+    var comparisonMode = false
     let onClose: () -> Void
     @State private var chromeVisible = true
     @State private var showSettings = false
@@ -27,11 +28,13 @@ struct ReaderView: View {
     private var rtl: Bool { liveBook.rightToLeft ?? settings.rightToLeft }
     private var vertical: Bool { liveBook.verticalText ?? settings.verticalText }
     private var slide: Bool { (liveBook.turnStyle ?? settings.turnStyle) == "slide" }
+    private var layout: LayoutMode { liveBook.layoutOverride.flatMap(LayoutMode.init(rawValue:)) ?? settings.layoutMode }
 
     private var textStyle: TextStyle {
         var s = settings.textStyle
         s.vertical = vertical
         s.title = liveBook.title
+        s.trimMargins = liveBook.trimMargins ?? false
         return s
     }
 
@@ -41,8 +44,8 @@ struct ReaderView: View {
             DeskBackground(desk: desk)
             PageCurlView(controller: controller)
                 .padding(.horizontal, 4)
-                .padding(.top, 6)
-                .padding(.bottom, 6)
+                .padding(.top, comparisonMode && chromeVisible ? 64 : 6)
+                .padding(.bottom, comparisonMode && chromeVisible ? 108 : 6)
             if settings.warmth > 0.01 {
                 Color(red: 1.0, green: 0.62, blue: 0.25)
                     .opacity(settings.warmth * 0.28)
@@ -132,10 +135,8 @@ struct ReaderView: View {
         .onChange(of: settings.pageStack) { _, _ in pushSettings() }
         .onChange(of: settings.curlSoftness) { _, _ in pushSettings() }
         .onChange(of: settings.turnStyle) { _, _ in pushSettings() }
-        .onChange(of: liveBook.turnStyle) { _, _ in pushSettings() }
+        .onChange(of: liveBook) { _, _ in pushSettings() }
         .onChange(of: settings.keepAwake) { _, v in UIApplication.shared.isIdleTimerDisabled = v }
-        .onChange(of: liveBook.rightToLeft) { _, _ in pushSettings() }
-        .onChange(of: liveBook.verticalText) { _, _ in pushSettings() }
         .sheet(isPresented: $showSettings) {
             SettingsView(book: liveBook)
                 .environmentObject(settings)
@@ -188,7 +189,7 @@ struct ReaderView: View {
     }
 
     private func pushSettings() {
-        controller.applySettings(layoutMode: settings.layoutMode, rightToLeft: rtl, style: textStyle,
+        controller.applySettings(layoutMode: layout, rightToLeft: rtl, style: textStyle,
                                  coverAlone: settings.coverAlone, showStack: settings.pageStack, softness: CGFloat(settings.curlSoftness),
                                  slide: slide)
     }
@@ -362,14 +363,14 @@ struct ReaderView: View {
                         if turningOn { flashHint() }
                     }
                     .accessibilityLabel(L10n.turnSlide)
-                    ChromeButton(desk: desk, systemName: settings.layoutMode.symbol, size: 36, active: settings.layoutMode != .auto, disabled: slide) {
+                    ChromeButton(desk: desk, systemName: layout.symbol, size: 36, active: layout != .auto, disabled: slide) {
                         settings.tap()
                         let all = LayoutMode.allCases
-                        let i = all.firstIndex(of: settings.layoutMode) ?? 0
-                        settings.layoutMode = all[(i + 1) % all.count]
+                        let i = all.firstIndex(of: layout) ?? 0
+                        library.setLayoutOverride(liveBook, all[(i + 1) % all.count])
                     }
                     .accessibilityLabel(L10n.layout)
-                    .accessibilityValue(settings.layoutMode.name)
+                    .accessibilityValue(layout.name)
                     ChromeButton(desk: desk, systemName: "textformat.size", size: 36) { settings.tap(); showSettings = true }
                         .accessibilityLabel(L10n.settings)
                 }
@@ -426,6 +427,7 @@ struct ContentsSheet: View {
     let isReflowable: Bool
     let onSelect: (Int, Int?) -> Void
     @State private var tab = 0
+    @State private var editingBookmark: Bookmark?
 
     private var liveBook: Book { library.book(withID: book.id) ?? book }
 
@@ -466,11 +468,15 @@ struct ContentsSheet: View {
                     } else {
                         List {
                             ForEach(liveBook.bookmarks) { bm in
-                                Button { onSelect(bm.page, isReflowable ? bm.offset : nil) } label: {
-                                    HStack {
+                                HStack {
+                                    Button { onSelect(bm.page, isReflowable ? bm.offset : nil) } label: {
+                                      HStack {
                                         Image(systemName: "bookmark.fill").foregroundStyle(desk.accent)
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(bm.label).lineLimit(1)
+                                            if let note = bm.note, !note.isEmpty {
+                                                Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                            }
                                             Text(bm.createdAt.formatted(date: .abbreviated, time: .shortened))
                                                 .font(.caption).foregroundStyle(.secondary)
                                         }
@@ -478,8 +484,12 @@ struct ContentsSheet: View {
                                         if !isReflowable {
                                             Text("\(bm.page + 1)").foregroundStyle(.secondary).monospacedDigit()
                                         }
-                                    }
-                                    .foregroundStyle(Color.primary)
+                                      }
+                                      .foregroundStyle(Color.primary)
+                                    }.buttonStyle(.borderless)
+                                    Button { editingBookmark = bm } label: { Image(systemName: "square.and.pencil") }
+                                        .buttonStyle(.borderless)
+                                        .accessibilityLabel(L10n.t("しおりのメモを編集", "Edit bookmark note"))
                                 }
                             }
                             .onDelete { idx in
@@ -499,6 +509,11 @@ struct ContentsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(L10n.done) { dismiss() } }
             }
+            .sheet(item: $editingBookmark) { bookmark in
+                BookmarkNoteSheet(bookmark: bookmark) { note in
+                    library.setBookmarkNote(book, id: bookmark.id, note: note)
+                }
+            }
         }
         .tint(desk.accent)
     }
@@ -511,6 +526,32 @@ struct ContentsSheet: View {
             Text(text).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct BookmarkNoteSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let bookmark: Bookmark
+    let onSave: (String) -> Void
+    @State private var note = ""
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $note)
+                .padding()
+                .navigationTitle(L10n.t("しおりのメモ", "Bookmark note"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button(L10n.cancel) { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(L10n.done) { onSave(note); dismiss() }
+                    }
+                }
+                .onAppear { note = bookmark.note ?? "" }
+                .onChange(of: note) { _, newValue in
+                    if newValue.count > 2000 { note = String(newValue.prefix(2000)) }
+                }
+        }
     }
 }
 
